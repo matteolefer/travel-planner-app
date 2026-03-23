@@ -23,7 +23,7 @@ const SYSTEM_PROMPT = `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON va
   "weather": { "temp": "22°C", "condition": "Ensoleillé", "forecast": [{"day": "Lun", "temp": 18}, {"day": "Mar", "temp": 20}, {"day": "Mer", "temp": 22}, {"day": "Jeu", "temp": 21}, {"day": "Ven", "temp": 19}] },
   "flight": { "airline": "", "departure": "10:30", "arrival": "14:45", "flightNumber": "", "date": "2026-03-15", "from": "CDG", "to": "" },
   "hotel": { "name": "", "stars": 4, "address": "", "checkIn": "", "checkOut": "", "pricePerNight": 120, "lat": 0.0, "lng": 0.0 },
-  "activities": [{ "day": 1, "emoji": "", "name": "", "time": "", "tag": "culture", "description": "", "duration": "2h", "price": "15€", "address": "", "lat": 0.0, "lng": 0.0 }],
+  "activities": [{ "day": 1, "emoji": "", "name": "", "time": "", "tag": "culture", "description": "", "duration": "2h", "price": "15€", "address": "", "travelTimeFromPrev": "~15 min à pied", "lat": 0.0, "lng": 0.0 }],
   "budget": { "total": 1500, "perDay": [{ "day": 1, "housing": 0, "food": 0, "transport": 0, "activities": 0 }], "summary": { "housing": 0, "food": 0, "transport": 0, "activities": 0, "other": 0 } },
   "packingList": { "essentials": ["Passeport", "Carte bancaire", "Assurance voyage"], "clothes": ["T-shirts légers", "Short", "Maillot de bain"], "gear": ["Crème solaire SPF50", "Adaptateur prise", "Gourde"], "health": ["Médicaments perso", "Anti-moustiques"] },
   "practicalInfo": { "visa": "", "vaccines": "", "plug": "", "currency": "", "timezone": "", "safety": "", "safetyLevel": 3, "warnings": "" },
@@ -856,8 +856,10 @@ function ActivitiesCard({ data, loading, onDayClick }) {
                   >
                     <Trash2 size={14} />
                   </button>
+                  {act.travelTimeFromPrev && <div className="act-travel-time">🚶 {act.travelTimeFromPrev}</div>}
                 </div>
               );
+            })}
             })}
             {deletedActs.map((act, i) => (
               <div key={`regen-${i}`} className="act-regenerate fade-in" style={{ animationDelay: `${filtered.length * 60 + i * 60}ms` }}>
@@ -982,7 +984,7 @@ function ActivitiesCard({ data, loading, onDayClick }) {
 
 // ─── BUDGET CARD ──────────────────────────────────────────────────────────────
 
-function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxBudget = 0, travelers = 'Solo' }) {
+function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxBudget = 0, travelers = 'Solo', actualSpending = {}, setActualSpending = () => {} }) {
   const [currency, setCurrency] = useState('EUR');
   const [rates,    setRates]    = useState(null);
 
@@ -1006,15 +1008,37 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
     }
   };
 
+  const handleExportBudgetCSV = () => {
+    const rows = [['Catégorie', 'Estimé (€)', 'Réel (€)']];
+    Object.entries(summary).forEach(([k, v]) => {
+      const actual = actualSpending[k] || 0;
+      rows.push([BUDGET_LABELS[k], v.toString(), actual.toString()]);
+    });
+    rows.push(['TOTAL', bud.total.toString(), Object.values(actualSpending).reduce((a, b) => a + b, 0).toString()]);
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `budget-${data?.destination?.city || 'voyage'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className={`bento-card fade-in ${isOver ? 'budget-over' : ''}`} style={{ animationDelay: '300ms' }}>
       <div className="card-label-row">
         <div className="card-label">Budget {isOver && <span className="budget-badge">⚠️ Dépassement</span>}</div>
-        {bud?.total && (
-          <select className="currency-select" value={currency} onChange={handleCurrencyChange}>
-            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {bud?.total && (
+            <>
+              <button className="icon-btn" title="Exporter CSV" onClick={handleExportBudgetCSV} style={{ fontSize: '12px', padding: '4px 8px' }}>📥 CSV</button>
+              <select className="currency-select" value={currency} onChange={handleCurrencyChange}>
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </>
+          )}
+        </div>
       </div>
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -1036,13 +1060,20 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
               </div>
             </div>
             <div className="budget-legend">
-              {Object.entries(summary).filter(([, v]) => v > 0).map(([k, v]) => (
-                <div key={k} className="legend-row">
-                  <div className="legend-dot" style={{ background: BUDGET_COLORS[k] }} />
-                  <span className="legend-lbl">{BUDGET_LABELS[k]}</span>
-                  <span className="legend-val">{conv(v)}{sym}</span>
-                </div>
-              ))}
+              {Object.entries(summary).filter(([, v]) => v > 0).map(([k, v]) => {
+                const actual = actualSpending[k] || 0;
+                return (
+                  <div key={k} className="legend-row" style={{ cursor: 'pointer' }} onClick={() => {
+                    const input = prompt(`Dépenses réelles - ${BUDGET_LABELS[k]} (€):`, actual.toString());
+                    if (input !== null) setActualSpending(p => ({ ...p, [k]: parseFloat(input) || 0 }));
+                  }}>
+                    <div className="legend-dot" style={{ background: BUDGET_COLORS[k] }} />
+                    <span className="legend-lbl">{BUDGET_LABELS[k]}</span>
+                    <span className="legend-val">{conv(v)}{sym}</span>
+                    {actual > 0 && <span className="legend-actual"> | {conv(actual)}{sym} réel</span>}
+                  </div>
+                );
+              })}
               {currency !== 'EUR' && rates?.[currency] && (
                 <div className="rate-info">1 EUR = {rates[currency].toFixed(2)} {currency}</div>
               )}
@@ -1564,6 +1595,7 @@ export default function App() {
   const [style, setStyle] = useState('Confort');
   const [pace, setPace] = useState('Chargé');
   const [maxBudget, setMaxBudget] = useState(5000);
+  const [actualSpending, setActualSpending] = useState({});
   const [highlightedDay, setHighlightedDay] = useState(null);
   const gridRef = useRef(null);
 
@@ -2031,7 +2063,7 @@ export default function App() {
           <HotelCard       data={activeData} loading={activeLoading} />
           <PracticalInfoCard data={activeData} loading={activeLoading} />
           <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} />
-          <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} />
+          <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} actualSpending={actualSpending} setActualSpending={setActualSpending} />
           <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} />
           <NotesCard       data={activeData} loading={activeLoading} onChange={notes => {
             if (activeStepIdx === 0) setData(p => p ? { ...p, notes } : p);
