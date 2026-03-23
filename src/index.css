@@ -1077,14 +1077,20 @@ body {
 .act-item-wrap {
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 0;
   animation: fadeUp 0.3s ease both;
   cursor: grab;
   transition: all 0.2s ease;
 }
 
 .act-item-wrap:active { cursor: grabbing; }
+
+.act-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 .act-item {
   display: flex;
@@ -1212,8 +1218,7 @@ body {
 .act-travel-time {
   font-size: 11px;
   color: var(--text-sec);
-  padding: 6px 10px 0;
-  margin-left: 46px;
+  padding: 2px 10px 6px 48px;
   font-weight: 500;
   opacity: 0.7;
 }

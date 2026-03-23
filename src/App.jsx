@@ -821,48 +821,49 @@ function ActivitiesCard({ data, loading, onDayClick }) {
                     transition: 'all 0.2s ease'
                   }}
                 >
-                  <div className="act-item" style={{ cursor: 'pointer' }} onClick={() => setSelectedActivity(act)}>
-                    <div className="act-emoji">{act.emoji}</div>
-                    <div className="act-info">
-                      <div className="act-name">{act.name}</div>
-                      <div className="act-meta">
-                        <span className="act-time"><Clock size={10} style={{ marginRight: 3 }} />{act.time}</span>
-                        <span className="act-tag" style={{ background: ts.bg, color: ts.color }}>{act.tag}</span>
+                  <div className="act-item-row">
+                    <div className="act-item" style={{ cursor: 'pointer' }} onClick={() => setSelectedActivity(act)}>
+                      <div className="act-emoji">{act.emoji}</div>
+                      <div className="act-info">
+                        <div className="act-name">{act.name}</div>
+                        <div className="act-meta">
+                          <span className="act-time"><Clock size={10} style={{ marginRight: 3 }} />{act.time}</span>
+                          <span className="act-tag" style={{ background: ts.bg, color: ts.color }}>{act.tag}</span>
+                        </div>
                       </div>
+                      <div className="act-stars" onClick={e => e.stopPropagation()}>
+                        {[1,2,3,4,5].map(star => (
+                          <button
+                            key={star}
+                            className="star-btn"
+                            onClick={() => setRating(actKey, rating === star ? 0 : star)}
+                          >
+                            <Star size={14} fill={star <= rating ? 'currentColor' : 'none'} color={star <= rating ? '#F59E0B' : 'var(--border)'} />
+                          </button>
+                        ))}
+                      </div>
+                      <button className="act-maps-btn" onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ', ' + data?.destination?.city)}`, '_blank'); }} title="Voir sur Google Maps"><MapPin size={14} /></button>
                     </div>
-                    <div className="act-stars" onClick={e => e.stopPropagation()}>
-                      {[1,2,3,4,5].map(star => (
-                        <button
-                          key={star}
-                          className="star-btn"
-                          onClick={() => setRating(actKey, rating === star ? 0 : star)}
-                        >
-                          <Star size={14} fill={star <= rating ? 'currentColor' : 'none'} color={star <= rating ? '#F59E0B' : 'var(--border)'} />
-                        </button>
-                      ))}
-                    </div>
-                    <button className="act-maps-btn" onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ', ' + data?.destination?.city)}`, '_blank'); }} title="Voir sur Google Maps"><MapPin size={14} /></button>
+                    <button
+                      className="act-delete"
+                      onClick={() => {
+                        if (actType?.type === 'orig') {
+                          handleDelete(actType.index);
+                        } else if (actType?.type === 'custom') {
+                          setCustomActivities(p => p.filter((_, idx) => idx !== actType.index));
+                          const newOrder = { ...dayActivityOrder };
+                          delete newOrder[activeDay];
+                          setDayActivityOrder(newOrder);
+                        }
+                      }}
+                      title="Supprimer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                  <button
-                    className="act-delete"
-                    onClick={() => {
-                      if (actType?.type === 'orig') {
-                        handleDelete(actType.index);
-                      } else if (actType?.type === 'custom') {
-                        setCustomActivities(p => p.filter((_, idx) => idx !== actType.index));
-                        const newOrder = { ...dayActivityOrder };
-                        delete newOrder[activeDay];
-                        setDayActivityOrder(newOrder);
-                      }
-                    }}
-                    title="Supprimer"
-                  >
-                    <Trash2 size={14} />
-                  </button>
                   {act.travelTimeFromPrev && <div className="act-travel-time">🚶 {act.travelTimeFromPrev}</div>}
                 </div>
               );
-            })}
             })}
             {deletedActs.map((act, i) => (
               <div key={`regen-${i}`} className="act-regenerate fade-in" style={{ animationDelay: `${filtered.length * 60 + i * 60}ms` }}>
@@ -1918,7 +1919,7 @@ export default function App() {
           if (!step.dest) { setStepsLoading(s => { const c = [...s]; c[i] = false; return c; }); continue; }
           try {
             const stepContext = { stepN: i + 2, total: extraSteps.length + 1, prevCity };
-            const stepDepCity = i === 0 ? depCity : prevCity;
+            const stepDepCity = prevCity;
             const depAirport = getCityAirportCode(stepDepCity);
             const sysMsg = SYSTEM_PROMPT.replace('"from": "CDG"', `"from": "${depAirport}"`);
             const stepRes = await fetch(MISTRAL_API_URL, {
