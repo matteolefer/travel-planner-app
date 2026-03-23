@@ -407,8 +407,8 @@ function WeatherCard({ data, loading, isLive }) {
           <div className="weather-cond">{w.condition}</div>
           <div className="forecast-row">
             {w.forecast?.map((f, i) => {
-              const temp = f.temp || f;
-              const day = f.day || '';
+              const temp = typeof f === 'number' ? f : (f.temp || 0);
+              const day = typeof f === 'object' ? (f.day || '') : '';
               return (
                 <div key={i} className="forecast-col">
                   <div className="forecast-wrap">

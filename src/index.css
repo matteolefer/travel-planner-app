@@ -42,6 +42,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ─── HEADER ───────────────────────────────────────────────────────────────── */
 .header {
   position: fixed;
@@ -1456,7 +1469,7 @@ body {
   font-weight: 600;
 }
 
-.dark .budget-badge {
+[data-theme="dark"] .budget-badge {
   background: rgba(239, 68, 68, 0.2);
   color: #FCA5A5;
 }
@@ -1679,11 +1692,13 @@ body {
 @keyframes slideDown {
   from {
     opacity: 0;
-    max-height: 0;
+    transform: scaleY(0);
+    transform-origin: top;
   }
   to {
     opacity: 1;
-    max-height: 500px;
+    transform: scaleY(1);
+    transform-origin: top;
   }
 }
 
@@ -2787,5 +2802,25 @@ body {
   .chat-panel {
     width: 100%;
     right: -100%;
+  }
+}
+
+/* ─── TABLET BREAKPOINT (681px–920px) ──────────────────────────────────────── */
+@media (min-width: 681px) and (max-width: 920px) {
+  .search-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .search-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .form-input {
+    font-size: 13px;
+    padding: 8px 12px;
   }
 }
