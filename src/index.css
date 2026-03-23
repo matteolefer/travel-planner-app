@@ -725,6 +725,12 @@ body {
   text-transform: uppercase;
 }
 
+.fl-city {
+  font-size: 10px;
+  color: var(--text-sec);
+  margin-top: 1px;
+}
+
 .fl-line {
   flex: 1;
   position: relative;
@@ -1136,10 +1142,12 @@ body {
   display: flex;
   gap: 4px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, width 0.2s;
+  width: 0;
+  overflow: hidden;
 }
 
-.act-item-wrap:hover .act-stars { opacity: 1; }
+.act-item-wrap:hover .act-stars { opacity: 1; width: auto; }
 
 .star-btn {
   background: none;
@@ -1188,12 +1196,13 @@ body {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: all 0.2s;
+  transition: opacity 0.2s, margin 0.2s;
   flex-shrink: 0;
   cursor: pointer;
+  margin-left: -28px;
 }
 
-.act-item-wrap:hover .act-maps-btn { opacity: 1; }
+.act-item-wrap:hover .act-maps-btn { opacity: 1; margin-left: 4px; }
 
 .act-maps-btn:hover {
   background: rgba(59, 130, 246, 0.2);

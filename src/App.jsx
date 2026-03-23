@@ -22,16 +22,16 @@ const SYSTEM_PROMPT = `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON va
 {
   "destination": { "city": "", "country": "", "dates": "Ex: 15-22 Mars 2026", "highlights": ["À ne pas manquer 1", "À ne pas manquer 2", "À ne pas manquer 3"] },
   "weather": { "temp": "22°C", "condition": "Ensoleillé", "forecast": [{"day": "Lun", "temp": 18}, {"day": "Mar", "temp": 20}, {"day": "Mer", "temp": 22}, {"day": "Jeu", "temp": 21}, {"day": "Ven", "temp": 19}] },
-  "flight": { "airline": "", "departure": "10:30", "arrival": "14:45", "flightNumber": "", "date": "2026-03-15", "from": "CDG", "to": "" },
+  "flight": { "airline": "", "departure": "10:30", "arrival": "14:45", "flightNumber": "", "date": "2026-03-15", "from": "CDG", "fromCity": "Paris", "to": "", "toCity": "" },
   "hotel": { "name": "", "stars": 4, "address": "", "checkIn": "", "checkOut": "", "pricePerNight": 120, "lat": 0.0, "lng": 0.0 },
-  "activities": [{ "day": 1, "emoji": "", "name": "", "time": "", "tag": "culture", "description": "", "duration": "2h", "price": "15€", "address": "", "travelTimeFromPrev": "~15 min à pied", "lat": 0.0, "lng": 0.0 }],
+  "activities": [{ "day": 1, "emoji": "", "name": "", "time": "", "tag": "culture", "description": "", "duration": "2h", "price": "15€", "address": "", "travelTimeFromPrev": "~15 min à pied", "lat": 48.8566, "lng": 2.3522 }],
   "budget": { "total": 1500, "perDay": [{ "day": 1, "housing": 0, "food": 0, "transport": 0, "activities": 0 }], "summary": { "housing": 0, "food": 0, "transport": 0, "activities": 0, "other": 0 } },
   "packingList": { "essentials": ["Passeport", "Carte bancaire", "Assurance voyage"], "clothes": ["T-shirts légers", "Short", "Maillot de bain"], "gear": ["Crème solaire SPF50", "Adaptateur prise", "Gourde"], "health": ["Médicaments perso", "Anti-moustiques"] },
   "practicalInfo": { "visa": "", "vaccines": "", "plug": "", "currency": "", "timezone": "", "safety": "", "safetyLevel": 3, "warnings": "" },
   "notes": "",
   "transport": { "mode": "avion", "duration": "3h30", "price": "250€", "from": "Paris", "to": "Tokyo" }
 }
-Les tags doivent être exactement "culture", "food" ou "nature". Adapte la météo à la saison des dates fournies. Considère les préférences utilisateur (nombre de voyageurs, style, rythme, budget) pour adapter le contenu. Les catégories de packingList doivent être adaptées à la destination ET la saison (hiver = manteau, tropique = anti-moustiques, etc). Pour le budget, fournis une répartition détaillée par jour (housing, food, transport, activities) dans perDay et un résumé par catégorie dans summary. Pour l'étape 1 (voyage direct), transport doit être null. Pour les étapes suivantes, renseigne le transport depuis la ville précédente.`;
+Les tags doivent être exactement "culture", "food" ou "nature". Adapte la météo à la saison des dates fournies. Considère les préférences utilisateur (nombre de voyageurs, style, rythme, budget) pour adapter le contenu. Les catégories de packingList doivent être adaptées à la destination ET la saison (hiver = manteau, tropique = anti-moustiques, etc). Pour le budget, fournis une répartition détaillée par jour (housing, food, transport, activities) dans perDay et un résumé par catégorie dans summary. Pour l'étape 1 (voyage direct), transport doit être null. Pour les étapes suivantes, renseigne le transport depuis la ville précédente. IMPORTANT: Pour chaque activité et hôtel, les coordonnées lat/lng doivent être précises et non nulles (ex: Paris = 48.8566, 2.3522). Ne jamais renvoyer lat: 0 ou lng: 0.`;
 
 const BUDGET_COLORS = { housing: '#8B5CF6', food: '#EC4899', transport: '#10B981', activities: '#F59E0B', other: '#6B7280' };
 const BUDGET_LABELS = { housing: 'Logement', food: 'Nourriture', transport: 'Transport', activities: 'Activités', other: 'Autre' };
@@ -461,11 +461,13 @@ function FlightCard({ data, loading, isReal }) {
             <div className="fl-point">
               <div className="fl-time">{fl.departure}</div>
               <div className="fl-code">{fl.from}</div>
+              {fl.fromCity && <div className="fl-city">{fl.fromCity}</div>}
             </div>
             <div className="fl-line"><Plane size={13} className="fl-plane-icon" /></div>
             <div className="fl-point" style={{ textAlign: 'right' }}>
               <div className="fl-time">{fl.arrival}</div>
               <div className="fl-code">{fl.to}</div>
+              {fl.toCity && <div className="fl-city">{fl.toCity}</div>}
             </div>
           </div>
         </>
@@ -1241,6 +1243,10 @@ function MapCard({ data, dark, allStepsData = [] }) {
     const bounds = [];
     const markerCluster = window.L.markerClusterGroup({ maxClusterRadius: 60 });
 
+    const allActivities = allStepsData.length > 1
+      ? allStepsData.flatMap(s => s?.activities || [])
+      : (data?.activities || []);
+
     const hotel = data?.hotel;
     if (hotel?.lat && hotel?.lng) {
       const icon = L.divIcon({ className: '', html: '<div class="map-marker hotel-marker">🏠</div>', iconSize: [32, 32], iconAnchor: [16, 16] });
@@ -1249,7 +1255,7 @@ function MapCard({ data, dark, allStepsData = [] }) {
         .addTo(markerCluster);
       bounds.push([hotel.lat, hotel.lng]);
     }
-    (data?.activities || []).forEach(act => {
+    allActivities.forEach(act => {
       if (!act.lat || !act.lng) return;
       const c = { culture: '#3B82F6', food: '#D97706', nature: '#059669', divertissement: '#A855F7' }[act.tag] || '#3B82F6';
       const icon = L.divIcon({ className: '', html: `<div class="map-marker act-marker" style="background:${c}">${act.emoji || '📍'}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
@@ -2063,13 +2069,16 @@ export default function App() {
     setChatLoading(true);
     try {
       const context = `Contexte du voyage: ${data?.destination?.city || 'N/A'}, ${data?.destination?.dates || 'N/A'}. Budget: ${data?.budget?.total || 'N/A'}€.`;
-      const msgs = [...chatMessages, { role: 'user', content: userMsg }].map(m => ({ role: m.role, content: m.content }));
+      const msgs = [...chatMessages, { role: 'user', content: `${context}\n\n${userMsg}` }].map(m => ({ role: m.role, content: m.content }));
       const res = await fetch(MISTRAL_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
         body: JSON.stringify({
           model: 'mistral-small-latest',
-          messages: [{ role: 'user', content: `${context}\n\nQuestion: ${userMsg}` }],
+          messages: [
+            { role: 'system', content: 'Tu es un assistant de voyage sympathique. Réponds en 2-3 phrases courtes, en langage naturel, sans JSON, sans markdown, sans listes.' },
+            ...msgs
+          ],
           temperature: 0.7,
         }),
       });
