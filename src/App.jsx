@@ -4,6 +4,7 @@ import {
   Wallet, CheckSquare2, FileText, Moon, RotateCcw, Sparkles,
   Loader2, X, Star, Clock, Key, ChevronRight,
   Bookmark, Trash2, Menu, Settings, Download, Plus, Columns,
+  LayoutGrid, LayoutList,
 } from 'lucide-react';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -1238,21 +1239,26 @@ function MapCard({ data, dark, allStepsData = [] }) {
     L.tileLayer(tileUrl, { attribution: '© CartoDB', maxZoom: 19 }).addTo(map);
 
     const bounds = [];
+    const markerCluster = window.L.markerClusterGroup({ maxClusterRadius: 60 });
+
     const hotel = data?.hotel;
     if (hotel?.lat && hotel?.lng) {
       const icon = L.divIcon({ className: '', html: '<div class="map-marker hotel-marker">🏠</div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-      L.marker([hotel.lat, hotel.lng], { icon }).addTo(map)
-        .bindPopup(`<b>${hotel.name}</b><br>${hotel.address || ''}`);
+      L.marker([hotel.lat, hotel.lng], { icon })
+        .bindPopup(`<b>${hotel.name}</b><br>${hotel.address || ''}`)
+        .addTo(markerCluster);
       bounds.push([hotel.lat, hotel.lng]);
     }
     (data?.activities || []).forEach(act => {
       if (!act.lat || !act.lng) return;
-      const c = { culture: '#3B82F6', food: '#D97706', nature: '#059669' }[act.tag] || '#3B82F6';
+      const c = { culture: '#3B82F6', food: '#D97706', nature: '#059669', divertissement: '#A855F7' }[act.tag] || '#3B82F6';
       const icon = L.divIcon({ className: '', html: `<div class="map-marker act-marker" style="background:${c}">${act.emoji || '📍'}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
-      L.marker([act.lat, act.lng], { icon }).addTo(map)
-        .bindPopup(`<b>${act.name}</b><br>${act.time || ''}`);
+      L.marker([act.lat, act.lng], { icon })
+        .bindPopup(`<b>${act.name}</b><br>${act.time || ''}<br>${act.tag}`)
+        .addTo(markerCluster);
       bounds.push([act.lat, act.lng]);
     });
+    map.addLayer(markerCluster);
 
     // Multi-step: draw polylines and step markers
     if (allStepsData.length > 1) {
@@ -1493,6 +1499,38 @@ function ExtraStepRow({ index, step, onChange, onRemove, disabled }) {
   );
 }
 
+function TimelineView({ data, destination }) {
+  if (!data?.activities?.length) return <div style={{padding: '20px', textAlign: 'center', color: 'var(--text-sec)'}}>Aucune activité</div>;
+
+  const days = [...new Set(data.activities.map(a => a.day || 1))].sort((a, b) => a - b);
+
+  return (
+    <div className="timeline-view">
+      <div className="timeline-title">{destination}</div>
+      {days.map(day => (
+        <div key={day} className="timeline-day">
+          <div className="timeline-day-header">Jour {day}</div>
+          {data.activities.filter(a => (a.day || 1) === day).map((act, i) => (
+            <div key={`${day}-${i}`} className="timeline-activity">
+              <div className="timeline-activity-time">{act.time}</div>
+              <div className="timeline-activity-dot" />
+              <div className="timeline-activity-content">
+                <div className="timeline-activity-name">{act.emoji} {act.name}</div>
+                <div className="timeline-activity-meta">
+                  <span className="timeline-tag" style={{background: TAG_STYLES[act.tag]?.bg, color: TAG_STYLES[act.tag]?.color}}>
+                    {act.tag}
+                  </span>
+                  {act.travelTimeFromPrev && <span className="timeline-travel">🚶 {act.travelTimeFromPrev}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest,
   compareDateDepart, setCompareDateDepart, compareDateRetour, setCompareDateRetour,
   onPlan, onChoose, onClose }) {
@@ -1596,6 +1634,7 @@ export default function App() {
   const [pace, setPace] = useState('Chargé');
   const [maxBudget, setMaxBudget] = useState(5000);
   const [actualSpending, setActualSpending] = useState({});
+  const [viewMode, setViewMode] = useState('grid');
   const [highlightedDay, setHighlightedDay] = useState(null);
   const gridRef = useRef(null);
 
@@ -1886,6 +1925,54 @@ export default function App() {
     }
   };
 
+  const handleExportStructuredPDF = () => {
+    if (!data) return;
+    try {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      let y = 10;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const addLine = (text, size = 10, bold = false) => {
+        if (y > pageHeight - 10) { pdf.addPage(); y = 10; }
+        pdf.setFontSize(size);
+        pdf.setFont(undefined, bold ? 'bold' : 'normal');
+        const lines = pdf.splitTextToSize(text, 190);
+        pdf.text(lines, 10, y);
+        y += size / 2.5 * lines.length + 2;
+      };
+
+      addLine(`Voyage à ${data.destination?.city}`, 16, true);
+      addLine(`${data.destination?.dates || 'Dates non spécifiées'}`, 10);
+      addLine(``, 5);
+
+      const days = [...new Set(data.activities?.map(a => a.day || 1) || [])].sort((a, b) => a - b);
+      days.forEach(day => {
+        addLine(`Jour ${day}`, 12, true);
+        data.activities
+          ?.filter(a => (a.day || 1) === day)
+          .forEach(act => {
+            addLine(`  ${act.emoji} ${act.time} - ${act.name} (${act.tag})`);
+          });
+        addLine(``, 5);
+      });
+
+      addLine(`Budget`, 12, true);
+      addLine(`Hôtel: ${data.hotel?.pricePerNight}€/nuit - Total estimé: ${data.budget?.total}€`);
+      addLine(``, 5);
+
+      if (data.packingList) {
+        addLine(`Packing List`, 12, true);
+        Object.entries(data.packingList).forEach(([cat, items]) => {
+          if (items?.length) addLine(`  ${cat}: ${items.join(', ')}`);
+        });
+      }
+
+      pdf.save(`voyage-${(data.destination?.city || dest).toLowerCase().replace(/\s+/g, '-')}-structured.pdf`);
+    } catch {
+      showToast('Export PDF structuré échoué');
+    }
+  };
+
   const handleReset = () => {
     setData(null); setDest(''); setDepCity('Paris (CDG)'); setDateDepart(''); setDateRetour('');
     setWeatherIsLive(false); setFlightIsReal(false);
@@ -1964,9 +2051,18 @@ export default function App() {
           <div className="header-right">
             {data && (
               <>
+                <button className="icon-btn" title={viewMode === 'grid' ? 'Timeline' : 'Grille'} onClick={() => setViewMode(viewMode === 'grid' ? 'timeline' : 'grid')}>
+                  {viewMode === 'grid' ? <LayoutList size={16} /> : <LayoutGrid size={16} />}
+                </button>
                 <button className="icon-btn" title="Régénérer" onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
                 <button className="icon-btn" title="Comparer" onClick={() => setCompareMode(true)}><Columns size={16} /></button>
-                <button className="icon-btn" title="Exporter PDF" onClick={handleExport}><Download size={16} /></button>
+                <div className="header-dropdown">
+                  <button className="icon-btn" title="Exporter" onClick={(e) => { e.currentTarget.parentElement.classList.toggle('open'); }}><Download size={16} /></button>
+                  <div className="dropdown-menu">
+                    <button onClick={handleExport}>Screenshot PDF</button>
+                    <button onClick={handleExportStructuredPDF}>PDF Structuré</button>
+                  </div>
+                </div>
                 <button className="icon-btn" title="Sauvegarder" onClick={handleSave}><Bookmark size={16} /></button>
                 <button className="icon-btn" title="Réinitialiser" onClick={handleReset}><RotateCcw size={16} /></button>
               </>
@@ -2055,26 +2151,30 @@ export default function App() {
           <StepTimeline steps={timelineSteps} activeIdx={activeStepIdx} onStepClick={setActiveStepIdx} />
         )}
 
-        {/* ── BENTO GRID ── */}
-        <main className="bento-grid" ref={gridRef}>
-          <DestinationCard data={activeData} loading={activeLoading} />
-          <WeatherCard     data={activeData} loading={activeLoading} isLive={weatherIsLive} />
-          <FlightCard      data={activeData} loading={activeLoading} isReal={flightIsReal} />
-          <HotelCard       data={activeData} loading={activeLoading} />
-          <PracticalInfoCard data={activeData} loading={activeLoading} />
-          <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} />
-          <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} actualSpending={actualSpending} setActualSpending={setActualSpending} />
-          <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} />
-          <NotesCard       data={activeData} loading={activeLoading} onChange={notes => {
-            if (activeStepIdx === 0) setData(p => p ? { ...p, notes } : p);
-            else setStepsData(s => { const c = [...s]; if (c[activeStepIdx - 1]) c[activeStepIdx - 1] = { ...c[activeStepIdx - 1], notes }; return c; });
-          }} />
-          {activeData && (
-            <MapCard data={activeData} dark={dark}
-              allStepsData={multiMode ? [data, ...stepsData].filter(Boolean) : []}
-            />
-          )}
-        </main>
+        {/* ── BENTO GRID OR TIMELINE ── */}
+        {viewMode === 'timeline' && activeData ? (
+          <TimelineView data={activeData} destination={activeData?.destination?.city} />
+        ) : (
+          <main className="bento-grid" ref={gridRef}>
+            <DestinationCard data={activeData} loading={activeLoading} />
+            <WeatherCard     data={activeData} loading={activeLoading} isLive={weatherIsLive} />
+            <FlightCard      data={activeData} loading={activeLoading} isReal={flightIsReal} />
+            <HotelCard       data={activeData} loading={activeLoading} />
+            <PracticalInfoCard data={activeData} loading={activeLoading} />
+            <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} />
+            <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} actualSpending={actualSpending} setActualSpending={setActualSpending} />
+            <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} />
+            <NotesCard       data={activeData} loading={activeLoading} onChange={notes => {
+              if (activeStepIdx === 0) setData(p => p ? { ...p, notes } : p);
+              else setStepsData(s => { const c = [...s]; if (c[activeStepIdx - 1]) c[activeStepIdx - 1] = { ...c[activeStepIdx - 1], notes }; return c; });
+            }} />
+            {activeData && (
+              <MapCard data={activeData} dark={dark}
+                allStepsData={multiMode ? [data, ...stepsData].filter(Boolean) : []}
+              />
+            )}
+          </main>
+        )}
         <SuggestionsBar suggestions={suggestions} onSelect={(city) => { setDest(city); handlePlan(city); }} />
       </div>
 

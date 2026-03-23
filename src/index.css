@@ -98,6 +98,50 @@ body {
   transform: translateY(-1px);
 }
 
+.header-dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 100;
+  min-width: 150px;
+  margin-top: 4px;
+  box-shadow: var(--shadow);
+}
+
+.header-dropdown.open .dropdown-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-menu button {
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.dropdown-menu button:hover {
+  background: var(--bg);
+}
+
+.dropdown-menu button:first-child {
+  border-bottom: 1px solid var(--border);
+}
+
 /* ─── SEARCH ────────────────────────────────────────────────────────────────── */
 .search-section {
   padding: 86px 28px 20px;
@@ -2437,6 +2481,105 @@ body {
   .timeline-circle { width: 36px; height: 36px; font-size: 14px; }
   .timeline-label { font-size: 10px; }
   .timeline-connector { min-width: 30px; }
+}
+
+/* ─── TIMELINE VIEW ────────────────────────── */
+.timeline-view {
+  max-width: 800px;
+  margin: 0 auto 24px;
+  padding: 0 16px;
+}
+
+.timeline-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.timeline-day {
+  margin-bottom: 32px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-day:last-child {
+  border-bottom: none;
+}
+
+.timeline-day-header {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.timeline-activity {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+
+.timeline-activity:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.timeline-activity-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 50px;
+  text-align: right;
+}
+
+.timeline-activity-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.timeline-activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-activity-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.timeline-activity-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.timeline-tag {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.timeline-travel {
+  color: var(--text-sec);
+  font-weight: 500;
 }
 
 /* ─── COMPARE MODE ───────────────────────── */
