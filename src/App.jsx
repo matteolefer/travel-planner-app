@@ -19,7 +19,7 @@ const CURRENCY_SYMBOLS = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', THB: '฿
 
 const SYSTEM_PROMPT = `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de backticks) avec cette structure exacte :
 {
-  "destination": { "city": "", "country": "", "dates": "Ex: 15-22 Mars 2026" },
+  "destination": { "city": "", "country": "", "dates": "Ex: 15-22 Mars 2026", "highlights": ["À ne pas manquer 1", "À ne pas manquer 2", "À ne pas manquer 3"] },
   "weather": { "temp": "22°C", "condition": "Ensoleillé", "forecast": [{"day": "Lun", "temp": 18}, {"day": "Mar", "temp": 20}, {"day": "Mer", "temp": 22}, {"day": "Jeu", "temp": 21}, {"day": "Ven", "temp": 19}] },
   "flight": { "airline": "", "departure": "10:30", "arrival": "14:45", "flightNumber": "", "date": "2026-03-15", "from": "CDG", "to": "" },
   "hotel": { "name": "", "stars": 4, "address": "", "checkIn": "", "checkOut": "", "pricePerNight": 120, "lat": 0.0, "lng": 0.0 },
@@ -359,6 +359,13 @@ function DestinationCard({ data, loading }) {
           <div className="dest-badge">{data.destination.country}</div>
           <h2 className="dest-city">{city}</h2>
           <p className="dest-dates"><Clock size={13} style={{ marginRight: 5 }} />{data.destination.dates}</p>
+          {data.destination.highlights && data.destination.highlights.length > 0 && (
+            <div className="dest-highlights">
+              {data.destination.highlights.map((h, i) => (
+                <div key={i} className="dest-highlight">✨ {h}</div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="dest-placeholder">
@@ -831,6 +838,7 @@ function ActivitiesCard({ data, loading, onDayClick }) {
                         </button>
                       ))}
                     </div>
+                    <button className="act-maps-btn" onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ', ' + data?.destination?.city)}`, '_blank'); }} title="Voir sur Google Maps"><MapPin size={14} /></button>
                   </div>
                   <button
                     className="act-delete"
@@ -909,6 +917,9 @@ function ActivitiesCard({ data, loading, onDayClick }) {
             <button className="act-modal-close" onClick={() => setSelectedActivity(null)}>
               <X size={18} />
             </button>
+            <button className="modal-maps-btn" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedActivity.name + ', ' + data?.destination?.city)}`, '_blank')} title="Voir sur Google Maps">
+              <MapPin size={16} />
+            </button>
             <div className="modal-emoji">{selectedActivity.emoji}</div>
             <h2 className="modal-title">{selectedActivity.name}</h2>
             <div className="rating-modal">
@@ -971,7 +982,7 @@ function ActivitiesCard({ data, loading, onDayClick }) {
 
 // ─── BUDGET CARD ──────────────────────────────────────────────────────────────
 
-function BudgetCard({ data, loading, highlightedDay = null }) {
+function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxBudget = 0, travelers = 'Solo' }) {
   const [currency, setCurrency] = useState('EUR');
   const [rates,    setRates]    = useState(null);
 
@@ -981,6 +992,10 @@ function BudgetCard({ data, loading, highlightedDay = null }) {
   const rate       = (currency !== 'EUR' && rates?.[currency]) ? rates[currency] : 1;
   const sym        = CURRENCY_SYMBOLS[currency] || currency;
   const conv       = (v) => currency === 'EUR' ? v : Math.round(v * rate);
+
+  const travelersMap = { 'Solo': 1, 'Couple': 2, 'Famille': 4, 'Groupe': 6 };
+  const nbTravelers = travelersMap[travelers] || 1;
+  const perPersonBudget = bud?.total ? Math.round(bud.total / nbTravelers) : 0;
 
   const handleCurrencyChange = async (e) => {
     const c = e.target.value;
@@ -992,9 +1007,9 @@ function BudgetCard({ data, loading, highlightedDay = null }) {
   };
 
   return (
-    <div className="bento-card fade-in" style={{ animationDelay: '300ms' }}>
+    <div className={`bento-card fade-in ${isOver ? 'budget-over' : ''}`} style={{ animationDelay: '300ms' }}>
       <div className="card-label-row">
-        <div className="card-label">Budget</div>
+        <div className="card-label">Budget {isOver && <span className="budget-badge">⚠️ Dépassement</span>}</div>
         {bud?.total && (
           <select className="currency-select" value={currency} onChange={handleCurrencyChange}>
             {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -1016,7 +1031,8 @@ function BudgetCard({ data, loading, highlightedDay = null }) {
               <div className="budget-center">
                 <div className="budget-spent">{conv(totalSpent)}{sym}</div>
                 <div className="budget-of">estimé</div>
-                <div style={{fontSize: '11px', color: 'var(--text-sec)', marginTop: '4px'}}>Budget max: {conv(bud.total)}{sym}</div>
+                <div style={{fontSize: '10px', color: 'var(--text-sec)', marginTop: '4px'}}>Budget max: {conv(bud.total)}{sym}</div>
+                {nbTravelers > 1 && <div style={{fontSize: '10px', color: 'var(--text-sec)', marginTop: '2px'}}>{conv(perPersonBudget)}{sym}/pers</div>}
               </div>
             </div>
             <div className="budget-legend">
@@ -1638,7 +1654,13 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   }, [dark]);
 
-  useEffect(() => { setChecked({}); }, [data?.checklist?.join(',')]);
+  useEffect(() => { setChecked({}); }, [activeData?.packingList]);
+
+  useEffect(() => {
+    if (activeData?.budget?.total && activeData.budget.total > maxBudget) {
+      showToast(`⚠️ Budget dépassé: ${activeData.budget.total}€ > ${maxBudget}€`);
+    }
+  }, [activeData?.budget?.total, maxBudget]);
 
   const showToast = (msg) => setToast(msg);
 
@@ -1838,6 +1860,36 @@ export default function App() {
     setExtraSteps([]); setStepsData([]); setStepsLoading([]); setActiveStepIdx(0);
   };
 
+  const handleRegenerateTrip = () => {
+    if (!data?.destination?.city) return;
+    showToast('Génération d\'une nouvelle version…');
+    handlePlan(data.destination.city);
+  };
+
+  const handleSurpriseMe = async () => {
+    if (!keys.mistral) { setShowModal(true); return; }
+    try {
+      const month = new Date().toLocaleDateString('fr-FR', { month: 'long' });
+      const msg = `Suggest ONE travel destination for a ${style} traveler with ${maxBudget}€ budget departing from ${depCity}. Respond ONLY with JSON: {"city": "", "country": ""}`;
+      const res = await fetch(MISTRAL_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
+        body: JSON.stringify({
+          model: 'mistral-small-latest',
+          messages: [{ role: 'user', content: msg }],
+          temperature: 0.9,
+        }),
+      });
+      const json = await res.json();
+      const raw = json.choices?.[0]?.message?.content || '{}';
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+      const { city } = JSON.parse(cleaned);
+      if (city) { setDest(city); handlePlan(city); }
+    } catch (e) {
+      showToast('Impossible de générer une destination surprise');
+    }
+  };
+
   const handleInspirationSelect = (inspiration) => {
     const today = new Date();
     const departure = new Date(today);
@@ -1880,6 +1932,7 @@ export default function App() {
           <div className="header-right">
             {data && (
               <>
+                <button className="icon-btn" title="Régénérer" onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
                 <button className="icon-btn" title="Comparer" onClick={() => setCompareMode(true)}><Columns size={16} /></button>
                 <button className="icon-btn" title="Exporter PDF" onClick={handleExport}><Download size={16} /></button>
                 <button className="icon-btn" title="Sauvegarder" onClick={handleSave}><Bookmark size={16} /></button>
@@ -1924,6 +1977,9 @@ export default function App() {
                 <Plus size={14} />
               </button>
             )}
+            <button className="btn-surprise" title="Destination surprise" onClick={handleSurpriseMe} disabled={loading || !keys.mistral}>
+              🎲
+            </button>
             <button className={`btn-plan${loading ? ' loading' : ''}`} onClick={() => { console.log('[Button click] Plan clicked'); handlePlan(); }} disabled={loading}>
               {loading ? <><Loader2 size={15} className="spin" />Planification…</> : <><Sparkles size={15} />Planifier</>}
             </button>
@@ -1975,7 +2031,7 @@ export default function App() {
           <HotelCard       data={activeData} loading={activeLoading} />
           <PracticalInfoCard data={activeData} loading={activeLoading} />
           <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} />
-          <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} />
+          <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} />
           <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} />
           <NotesCard       data={activeData} loading={activeLoading} onChange={notes => {
             if (activeStepIdx === 0) setData(p => p ? { ...p, notes } : p);
