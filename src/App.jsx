@@ -1499,6 +1499,51 @@ function ExtraStepRow({ index, step, onChange, onRemove, disabled }) {
   );
 }
 
+function ChatPanel({ messages, loading, onSendMessage, onClose, open }) {
+  const [input, setInput] = React.useState('');
+  const messagesEnd = React.useRef(null);
+
+  React.useEffect(() => {
+    messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = () => {
+    if (input.trim()) {
+      onSendMessage(input);
+      setInput('');
+    }
+  };
+
+  return (
+    <div className={`chat-panel ${open ? 'open' : ''}`}>
+      <div className="chat-header">
+        <div className="chat-title">Assistant IA</div>
+        <button className="chat-close" onClick={onClose}><X size={16} /></button>
+      </div>
+      <div className="chat-messages">
+        {messages.map((msg, i) => (
+          <div key={i} className={`chat-message ${msg.role}`}>
+            <div className="chat-content">{msg.content}</div>
+          </div>
+        ))}
+        {loading && <div className="chat-message assistant"><Loader2 size={14} className="spin" /></div>}
+        <div ref={messagesEnd} />
+      </div>
+      <div className="chat-input">
+        <input
+          type="text"
+          placeholder="Posez une question..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !loading && handleSend()}
+          disabled={loading}
+        />
+        <button onClick={handleSend} disabled={loading || !input.trim()}>📤</button>
+      </div>
+    </div>
+  );
+}
+
 function TimelineView({ data, destination }) {
   if (!data?.activities?.length) return <div style={{padding: '20px', textAlign: 'center', color: 'var(--text-sec)'}}>Aucune activité</div>;
 
@@ -1635,6 +1680,9 @@ export default function App() {
   const [maxBudget, setMaxBudget] = useState(5000);
   const [actualSpending, setActualSpending] = useState({});
   const [viewMode, setViewMode] = useState('grid');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
   const [highlightedDay, setHighlightedDay] = useState(null);
   const gridRef = useRef(null);
 
@@ -2009,6 +2057,32 @@ export default function App() {
     }
   };
 
+  const handleChatMessage = async (userMsg) => {
+    if (!userMsg.trim() || !keys.mistral) return;
+    setChatMessages(m => [...m, { role: 'user', content: userMsg }]);
+    setChatLoading(true);
+    try {
+      const context = `Contexte du voyage: ${data?.destination?.city || 'N/A'}, ${data?.destination?.dates || 'N/A'}. Budget: ${data?.budget?.total || 'N/A'}€.`;
+      const msgs = [...chatMessages, { role: 'user', content: userMsg }].map(m => ({ role: m.role, content: m.content }));
+      const res = await fetch(MISTRAL_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
+        body: JSON.stringify({
+          model: 'mistral-small-latest',
+          messages: [{ role: 'user', content: `${context}\n\nQuestion: ${userMsg}` }],
+          temperature: 0.7,
+        }),
+      });
+      const json = await res.json();
+      const reply = json.choices?.[0]?.message?.content || 'Erreur lors de la réponse';
+      setChatMessages(m => [...m, { role: 'assistant', content: reply }]);
+    } catch (e) {
+      showToast('Erreur chat IA');
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const handleInspirationSelect = (inspiration) => {
     const today = new Date();
     const departure = new Date(today);
@@ -2054,6 +2128,7 @@ export default function App() {
                 <button className="icon-btn" title={viewMode === 'grid' ? 'Timeline' : 'Grille'} onClick={() => setViewMode(viewMode === 'grid' ? 'timeline' : 'grid')}>
                   {viewMode === 'grid' ? <LayoutList size={16} /> : <LayoutGrid size={16} />}
                 </button>
+                <button className="icon-btn" title="Chat IA" onClick={() => setChatOpen(o => !o)}>💬</button>
                 <button className="icon-btn" title="Régénérer" onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
                 <button className="icon-btn" title="Comparer" onClick={() => setCompareMode(true)}><Columns size={16} /></button>
                 <div className="header-dropdown">
@@ -2178,6 +2253,7 @@ export default function App() {
         <SuggestionsBar suggestions={suggestions} onSelect={(city) => { setDest(city); handlePlan(city); }} />
       </div>
 
+      {chatOpen && <ChatPanel messages={chatMessages} loading={chatLoading} onSendMessage={handleChatMessage} onClose={() => setChatOpen(false)} open={chatOpen} />}
       {toast      && <Toast message={toast} onClose={() => setToast(null)} />}
       {showModal  && <SettingsModal keys={keys} onSave={saveAllKeys} onClose={() => setShowModal(false)} />}
     </div>
