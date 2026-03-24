@@ -387,7 +387,7 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
 
   React.useEffect(() => {
     if (wikiPhoto || !city) return;
-    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)},travel,destination`);
+    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)}`);
   }, [city, wikiPhoto]);
 
   return (
@@ -489,7 +489,7 @@ function DestinationCard({ data, loading }) {
       setWikiPhoto(null);
       return;
     }
-    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)},travel,destination`);
+    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)}`);
   }, [city]);
 
   const photoUrl = wikiPhoto || (city ? `https://picsum.photos/seed/${getSeed(city)}/800/600` : null);
