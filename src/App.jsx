@@ -644,20 +644,16 @@ function PracticalInfoCard({ data, loading }) {
 
 // ─── ACTIVITIES CARD ──────────────────────────────────────────────────────────
 
-function ActivitiesCard({ data, loading, onDayClick }) {
+function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, customActivities, setCustomActivities, deletedIndices, setDeletedIndices, dayActivityOrder, setDayActivityOrder }) {
   const acts   = data?.activities || [];
   const days   = [...new Set(acts.map(a => a.day || 1))].sort((a, b) => a - b);
   const [activeDay, setActiveDay] = useState(1);
   const [fading, setFading]       = useState(false);
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedActivity, setSelectedActivity] = useState(null);
-  const [deletedIndices, setDeletedIndices] = useState(new Set());
   const [regenerating, setRegenerating] = useState(null);
-  const [customActivities, setCustomActivities] = useState([]);
-  const [ratings, setRatings] = useState({});
   const [addingDay, setAddingDay] = useState(null);
   const [formData, setFormData] = useState({ name: '', time: '', tag: 'culture' });
-  const [dayActivityOrder, setDayActivityOrder] = useState({});
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -702,11 +698,37 @@ function ActivitiesCard({ data, loading, onDayClick }) {
     }
   };
 
-  const handleAddActivity = () => {
+  const handleAddActivity = async () => {
     if (!formData.name.trim() || !formData.time.trim()) return;
-    setCustomActivities(p => [...p, { ...formData, day: activeDay, emoji: '✏️' }]);
+    const newActivity = { ...formData, day: activeDay, emoji: '✏️', lat: null, lng: null, geocoding: true };
+    setCustomActivities(p => [...p, newActivity]);
     setFormData({ name: '', time: '', tag: 'culture' });
     setAddingDay(null);
+
+    // Geocode the activity
+    const destCity = data?.destination?.city;
+    if (destCity) {
+      try {
+        const query = `${formData.name} ${destCity}`;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
+        const results = await res.json();
+        if (results.length > 0) {
+          const { lat, lon } = results[0];
+          setCustomActivities(p => p.map(a =>
+            a.name === formData.name ? { ...a, lat: parseFloat(lat), lng: parseFloat(lon), geocoding: false } : a
+          ));
+        } else {
+          setCustomActivities(p => p.map(a =>
+            a.name === formData.name ? { ...a, geocoding: false } : a
+          ));
+        }
+      } catch (err) {
+        console.error('[geocode] Error:', err);
+        setCustomActivities(p => p.map(a =>
+          a.name === formData.name ? { ...a, geocoding: false } : a
+        ));
+      }
+    }
   };
 
   const setRating = (actKey, stars) => {
@@ -852,7 +874,10 @@ function ActivitiesCard({ data, loading, onDayClick }) {
                 >
                   <div className="act-item-row">
                     <div className="act-item" style={{ cursor: 'pointer' }} onClick={() => setSelectedActivity(act)}>
-                      <div className="act-emoji">{act.emoji}</div>
+                      <div className="act-emoji" style={{ position: 'relative' }}>
+                        {act.emoji}
+                        {act.geocoding && <Loader2 size={12} style={{ position: 'absolute', bottom: 0, right: 0, animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />}
+                      </div>
                       <div className="act-info">
                         <div className="act-name">{act.name}</div>
                         <div className="act-meta">
@@ -1180,13 +1205,15 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
 
 // ─── PACKING LIST CARD ────────────────────────────────────────────────────────────
 
-function PackingListCard({ data, loading, checked, onToggle }) {
+function PackingListCard({ data, loading, checked, onToggle, customPackingItems = {}, setCustomPackingItems = () => {} }) {
   const packingList = data?.packingList || {};
   const [expanded, setExpanded] = useState({ essentials: true, clothes: true, gear: true, health: true });
+  const [addingCategory, setAddingCategory] = useState(null);
+  const [addItemValue, setAddItemValue] = useState('');
   const keyRef = useRef('');
   useEffect(() => { keyRef.current = JSON.stringify(packingList); }, [packingList]);
 
-  const allItems = Object.values(packingList).flat();
+  const allItems = Object.values(packingList).flat().concat(Object.values(customPackingItems).flat());
   const packedCount = allItems.filter(item => !!checked[item]).length;
   const totalCount = allItems.length;
 
@@ -1213,19 +1240,31 @@ function PackingListCard({ data, loading, checked, onToggle }) {
           <div className="packing-counter">{packedCount}/{totalCount} items prêts</div>
           <div className="packing-categories">
             {categories.map(({ key, label, icon }) => {
-              const items = packingList[key] || [];
-              if (items.length === 0) return null;
+              const baseItems = packingList[key] || [];
+              const customItems = customPackingItems[key] || [];
+              const allCatItems = [...baseItems, ...customItems];
+              if (allCatItems.length === 0) return null;
+              const isAdding = addingCategory === key;
+              const handleAddItem = () => {
+                if (!addItemValue.trim()) return;
+                setCustomPackingItems(p => ({
+                  ...p,
+                  [key]: [...(p[key] || []), addItemValue.trim()]
+                }));
+                setAddItemValue('');
+                setAddingCategory(null);
+              };
               return (
                 <div key={key} className="packing-category">
                   <button className="category-header" onClick={() => toggleCategory(key)}>
                     <span className="cat-icon">{icon}</span>
                     <span className="cat-label">{label}</span>
-                    <span className="cat-count">{items.filter(i => !!checked[i]).length}/{items.length}</span>
+                    <span className="cat-count">{allCatItems.filter(i => !!checked[i]).length}/{allCatItems.length}</span>
                     <ChevronRight size={14} className={`chevron ${expanded[key] ? 'open' : ''}`} />
                   </button>
                   {expanded[key] && (
                     <div className="category-items">
-                      {items.map((item, i) => {
+                      {allCatItems.map((item, i) => {
                         const on = !!checked[item];
                         return (
                           <button key={i} className={`check-item ${on ? 'done' : ''}`} onClick={() => onToggle(item)}>
@@ -1234,6 +1273,24 @@ function PackingListCard({ data, loading, checked, onToggle }) {
                           </button>
                         );
                       })}
+                      {isAdding ? (
+                        <div style={{ display: 'flex', gap: 6, padding: '6px 0' }}>
+                          <input
+                            type="text"
+                            value={addItemValue}
+                            onChange={(e) => setAddItemValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddItem(); }}
+                            onBlur={handleAddItem}
+                            autoFocus
+                            placeholder="Nouvel item..."
+                            style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid var(--accent)', borderRadius: '4px' }}
+                          />
+                        </div>
+                      ) : (
+                        <button className="check-item" onClick={() => setAddingCategory(key)} style={{ color: 'var(--accent)', justifyContent: 'center' }}>
+                          <Plus size={14} /> Ajouter
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1740,6 +1797,11 @@ export default function App() {
   const [pace, setPace] = useState('Chargé');
   const [maxBudget, setMaxBudget] = useState(5000);
   const [actualSpending, setActualSpending] = useState({});
+  const [ratings, setRatings] = useState({});
+  const [customActivities, setCustomActivities] = useState([]);
+  const [deletedIndices, setDeletedIndices] = useState(new Set());
+  const [dayActivityOrder, setDayActivityOrder] = useState({});
+  const [customPackingItems, setCustomPackingItems] = useState({});
   const [viewMode, setViewMode] = useState('grid');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState(() => {
@@ -1755,6 +1817,7 @@ export default function App() {
   const [chatLoading, setChatLoading] = useState(false);
   const [highlightedDay, setHighlightedDay] = useState(null);
   const gridRef = useRef(null);
+  const isLoadingTripRef = useRef(false);
 
   // Multi-step mode state
   const [extraSteps,    setExtraSteps]    = useState([]);
@@ -1843,7 +1906,13 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   }, [dark]);
 
-  useEffect(() => { setChecked({}); }, [activeData?.packingList]);
+  useEffect(() => {
+    if (!isLoadingTripRef.current) {
+      setChecked({});
+    } else {
+      isLoadingTripRef.current = false;
+    }
+  }, [activeData?.packingList]);
 
   useEffect(() => {
     if (activeData?.budget?.total && activeData.budget.total > maxBudget) {
@@ -1881,7 +1950,23 @@ export default function App() {
   // ── SAVE / LOAD TRIPS ──────────────────────────────────────────────────────
   const handleSave = () => {
     if (!data?.destination?.city) return;
-    const trip = { id: Date.now(), city: data.destination.city, country: data.destination.country || '', dateDepart, dateRetour, dates: data.destination.dates || '', data };
+    const trip = {
+      id: Date.now(),
+      city: data.destination.city,
+      country: data.destination.country || '',
+      dateDepart,
+      dateRetour,
+      dates: data.destination.dates || '',
+      data,
+      stepsData,
+      checked,
+      actualSpending,
+      ratings,
+      customActivities,
+      deletedIndices: Array.from(deletedIndices),
+      dayActivityOrder,
+      customPackingItems,
+    };
     const updated = [trip, ...savedTrips.filter(t => !(t.city === trip.city && t.dateDepart === trip.dateDepart))];
     setSavedTrips(updated);
     localStorage.setItem('saved_trips', JSON.stringify(updated));
@@ -1889,7 +1974,9 @@ export default function App() {
   };
 
   const handleLoadTrip = (trip) => {
-    setData(trip.data); setDest(trip.city);
+    isLoadingTripRef.current = true;
+    setData(trip.data);
+    setDest(trip.city);
     setDateDepart(trip.dateDepart || '');
     setDateRetour(trip.dateRetour || '');
     if (trip.data?.destination?.dates) {
@@ -1897,7 +1984,16 @@ export default function App() {
       if (d1) setDateDepart(d1);
       if (d2) setDateRetour(d2);
     }
-    setWeatherIsLive(false); setFlightIsReal(false);
+    setStepsData(trip.stepsData || []);
+    setChecked(trip.checked || {});
+    setActualSpending(trip.actualSpending || {});
+    setRatings(trip.ratings || {});
+    setCustomActivities(trip.customActivities || []);
+    setDeletedIndices(new Set(trip.deletedIndices || []));
+    setDayActivityOrder(trip.dayActivityOrder || {});
+    setCustomPackingItems(trip.customPackingItems || {});
+    setWeatherIsLive(false);
+    setFlightIsReal(false);
   };
 
   const handleDeleteTrip = (id) => {
@@ -2330,9 +2426,9 @@ export default function App() {
             <FlightCard      data={activeData} loading={activeLoading} isReal={flightIsReal} enriching={enrichingFlight} />
             <HotelCard       data={activeData} loading={activeLoading} />
             <PracticalInfoCard data={activeData} loading={activeLoading} />
-            <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} />
+            <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} ratings={ratings} setRatings={setRatings} customActivities={customActivities} setCustomActivities={setCustomActivities} deletedIndices={deletedIndices} setDeletedIndices={setDeletedIndices} dayActivityOrder={dayActivityOrder} setDayActivityOrder={setDayActivityOrder} />
             <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} actualSpending={actualSpending} setActualSpending={setActualSpending} />
-            <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} />
+            <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} customPackingItems={customPackingItems} setCustomPackingItems={setCustomPackingItems} />
             <NotesCard       data={activeData} loading={activeLoading} onChange={notes => {
               if (activeStepIdx === 0) setData(p => p ? { ...p, notes } : p);
               else setStepsData(s => { const c = [...s]; if (c[activeStepIdx - 1]) c[activeStepIdx - 1] = { ...c[activeStepIdx - 1], notes }; return c; });
