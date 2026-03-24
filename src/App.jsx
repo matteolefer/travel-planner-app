@@ -704,12 +704,16 @@ function HotelCard({ data, loading }) {
             <button
               className="btn-secondary"
               onClick={() => {
-                const checkIn = h.checkIn?.replace(/\s/g, '').split('/').reverse().join('-');
-                const checkOut = h.checkOut?.replace(/\s/g, '').split('/').reverse().join('-');
+                const parseDate = (dateStr) => {
+                  if (!dateStr) return '';
+                  const parts = dateStr.split('/').map(p => p.trim());
+                  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                  return '';
+                };
                 const params = new URLSearchParams({
                   ss: data.destination.city,
-                  checkin: checkIn || '',
-                  checkout: checkOut || '',
+                  checkin: parseDate(h.checkIn) || '',
+                  checkout: parseDate(h.checkOut) || '',
                   no_rooms: '1',
                   group_adults: '1'
                 });
@@ -2491,7 +2495,7 @@ END:VEVENT
         />
       );
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const canvas = await window.html2canvas(container.firstChild, { scale: 2, useCORS: true, logging: false });
       root.unmount();
