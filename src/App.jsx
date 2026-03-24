@@ -633,12 +633,7 @@ function FlightCard({ data, loading, isReal, enriching = false }) {
           <button
             className="btn-secondary"
             onClick={() => {
-              let url = `https://www.google.com/travel/explore?q=Flights+from+${fl.from}+to+${fl.to}`;
-              if (fl.date) {
-                const dateParts = fl.date.split('-');
-                if (dateParts.length === 3) url += `+on+${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-              }
-              window.open(url, '_blank');
+              window.open(`https://www.google.com/travel/explore?q=flights+from+${fl.from}+to+${fl.to}`, '_blank');
             }}
             style={{ marginTop: '10px', fontSize: '12px' }}
           >
@@ -704,8 +699,14 @@ function HotelCard({ data, loading }) {
               onClick={() => {
                 const parseDate = (dateStr) => {
                   if (!dateStr) return '';
+                  dateStr = dateStr.trim();
+                  if (dateStr.includes('-')) {
+                    return dateStr;
+                  }
                   const parts = dateStr.split('/').map(p => p.trim());
-                  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                  if (parts.length === 3 && parts[2].length === 4) {
+                    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                  }
                   return '';
                 };
                 const params = new URLSearchParams({
