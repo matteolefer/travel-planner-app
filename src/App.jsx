@@ -31,7 +31,7 @@ const SYSTEM_PROMPT = `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON va
   "notes": "",
   "transport": { "mode": "avion", "duration": "3h30", "price": "250€", "from": "Paris", "to": "Tokyo" }
 }
-Les tags doivent être exactement "culture", "food" ou "nature". Adapte la météo à la saison des dates fournies. Considère les préférences utilisateur (nombre de voyageurs, style, rythme, budget) pour adapter le contenu. Les catégories de packingList doivent être adaptées à la destination ET la saison (hiver = manteau, tropique = anti-moustiques, etc). Pour le budget, fournis une répartition détaillée par jour (housing, food, transport, activities) dans perDay et un résumé par catégorie dans summary. Pour l'étape 1 (voyage direct), transport doit être null. Pour les étapes suivantes, renseigne le transport depuis la ville précédente. IMPORTANT: Pour chaque activité et hôtel, les coordonnées lat/lng doivent être précises et non nulles (ex: Paris = 48.8566, 2.3522). Ne jamais renvoyer lat: 0 ou lng: 0.`;
+Les tags doivent être exactement "culture", "food", "nature" ou "divertissement". Adapte la météo à la saison des dates fournies. Considère les préférences utilisateur (nombre de voyageurs, style, rythme, budget) pour adapter le contenu. Les catégories de packingList doivent être adaptées à la destination ET la saison (hiver = manteau, tropique = anti-moustiques, etc). Pour le budget, fournis une répartition détaillée par jour (housing, food, transport, activities) dans perDay et un résumé par catégorie dans summary. Pour l'étape 1 (voyage direct), transport doit être null. Pour les étapes suivantes, renseigne le transport depuis la ville précédente. IMPORTANT: Pour chaque activité et hôtel, les coordonnées lat/lng doivent être précises et non nulles (ex: Paris = 48.8566, 2.3522). Ne jamais renvoyer lat: 0 ou lng: 0.`;
 
 const BUDGET_COLORS = { housing: '#8B5CF6', food: '#EC4899', transport: '#10B981', activities: '#F59E0B', other: '#6B7280' };
 const BUDGET_LABELS = { housing: 'Logement', food: 'Nourriture', transport: 'Transport', activities: 'Activités', other: 'Autre' };
@@ -55,14 +55,37 @@ function daysBetween(d1, d2) {
 }
 
 const CITY_AIRPORT_MAP = {
-  'paris': 'CDG', 'paris cdg': 'CDG', 'paris (cdg)': 'CDG', 'charles de gaulle': 'CDG',
-  'lyon': 'LYS', 'marseille': 'MRS', 'nice': 'NCE', 'toulouse': 'TLS', 'bordeaux': 'BOD',
-  'nantes': 'NTE', 'lille': 'LIL', 'strasbourg': 'SXB', 'geneva': 'GVA', 'zurich': 'ZRH',
-  'london': 'LHR', 'berlin': 'BER', 'amsterdam': 'AMS', 'barcelona': 'BCN', 'madrid': 'MAD',
-  'maldives': 'MLE', 'cusco': 'CUZ', 'marrakech': 'RAK', 'dubai': 'DXB', 'new york': 'JFK', 'lisbon': 'LIS', 'lisbonne': 'LIS',
-  'rome': 'FCO', 'milano': 'MXP', 'milan': 'MXP', 'venice': 'VCE', 'vienna': 'VIE',
-  'prague': 'PRG', 'budapest': 'BUD', 'warsaw': 'WAW', 'lisbon': 'LIS', 'porto': 'OPO',
-  'dublin': 'DUB', 'bangkok': 'BKK', 'tokyo': 'NRT', 'new york': 'JFK', 'los angeles': 'LAX',
+  // France
+  'paris': 'CDG', 'paris cdg': 'CDG', 'paris (cdg)': 'CDG', 'charles de gaulle': 'CDG', 'orly': 'ORY',
+  'lyon': 'LYS', 'marseille': 'MRS', 'nice': 'NCE', 'toulouse': 'TLS', 'bordeaux': 'BOD', 'nantes': 'NTE',
+  'lille': 'LIL', 'strasbourg': 'SXB', 'montpellier': 'MPL', 'grenoble': 'GNB', 'toulon': 'TLN',
+  // Europe
+  'geneva': 'GVA', 'zurich': 'ZRH', 'basel': 'BSL', 'bern': 'BRN',
+  'london': 'LHR', 'manchester': 'MAN', 'edinburgh': 'EDI', 'dublin': 'DUB',
+  'berlin': 'BER', 'munich': 'MUC', 'frankfurt': 'FRA', 'cologne': 'CGN', 'hamburg': 'HAM',
+  'amsterdam': 'AMS', 'rotterdam': 'RTM', 'barcelona': 'BCN', 'madrid': 'MAD', 'malaga': 'AGP',
+  'lisbon': 'LIS', 'lisbonne': 'LIS', 'porto': 'OPO', 'rome': 'FCO', 'milan': 'MXP', 'milano': 'MXP',
+  'venice': 'VCE', 'venice (marco polo)': 'VCE', 'vienna': 'VIE', 'prague': 'PRG', 'budapest': 'BUD',
+  'warsaw': 'WAW', 'krakow': 'KRK', 'athens': 'ATH', 'istanbul': 'IST', 'marrakech': 'RAK',
+  // Africa & Middle East
+  'dubai': 'DXB', 'abu dhabi': 'AUH', 'cape town': 'CPT', 'johannesburg': 'JNB', 'cairo': 'CAI',
+  'casablanca': 'CMN', 'tangier': 'TNG', 'accra': 'ACC', 'lagos': 'LOS',
+  // Asia
+  'singapore': 'SIN', 'singapore changi': 'SIN', 'bali': 'DPS', 'denpasar': 'DPS', 'bangkok': 'BKK',
+  'chiang mai': 'CNX', 'phuket': 'HKT', 'hanoi': 'HAN', 'ho chi minh city': 'SGN', 'saigon': 'SGN',
+  'phnom penh': 'PNH', 'kuala lumpur': 'KUL', 'manila': 'MNL', 'hong kong': 'HKG', 'macau': 'MFM',
+  'shanghai': 'PVG', 'beijing': 'PEI', 'guangzhou': 'CAN', 'tokyo': 'NRT', 'narita': 'NRT', 'haneda': 'HND',
+  'osaka': 'KIX', 'kyoto': 'KIX', 'seoul': 'ICN', 'mumbai': 'BOM', 'delhi': 'DEL', 'bangalore': 'BLR',
+  'bangkok': 'BKK', 'pattaya': 'BKK', 'new delhi': 'DEL',
+  // Americas
+  'new york': 'JFK', 'new york (jfk)': 'JFK', 'newark': 'EWR', 'los angeles': 'LAX', 'las vegas': 'LAS',
+  'san francisco': 'SFO', 'san diego': 'SAN', 'seattle': 'SEA', 'chicago': 'ORD', 'miami': 'MIA',
+  'toronto': 'YYZ', 'montreal': 'YUL', 'vancouver': 'YVR', 'mexico city': 'MEX', 'cancun': 'CUN',
+  'bahamas': 'NAS', 'nassau': 'NAS', 'havana': 'HAV', 'lima': 'LIM', 'cusco': 'CUZ', 'buenos aires': 'AEP',
+  'sao paulo': 'GIG', 'rio de janeiro': 'RIO', 'cartagena': 'CTG', 'bogota': 'BOG',
+  // Oceania
+  'sydney': 'SYD', 'melbourne': 'MEL', 'brisbane': 'BNE', 'perth': 'PER', 'auckland': 'AKL',
+  'fiji': 'NAN', 'tahiti': 'PPT', 'samoa': 'APW',
 };
 
 function getCityAirportCode(cityInput) {
@@ -380,7 +403,7 @@ function DestinationCard({ data, loading }) {
 
 // ─── WEATHER CARD ─────────────────────────────────────────────────────────────
 
-function WeatherCard({ data, loading, isLive }) {
+function WeatherCard({ data, loading, isLive, enriching = false }) {
   const w    = data?.weather;
   const maxT = w?.forecast?.length ? Math.max(...w.forecast.map(f => f.temp || f)) : 1;
 
@@ -388,7 +411,10 @@ function WeatherCard({ data, loading, isLive }) {
     <div className="bento-card fade-in" style={{ animationDelay: '60ms' }}>
       <div className="card-label-row">
         <div className="card-label">Météo</div>
-        {isLive && <LiveBadge />}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {enriching && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />}
+          {isLive && <LiveBadge />}
+        </div>
       </div>
       {loading ? (
         <>
@@ -430,14 +456,17 @@ function WeatherCard({ data, loading, isLive }) {
 
 // ─── FLIGHT CARD ──────────────────────────────────────────────────────────────
 
-function FlightCard({ data, loading, isReal }) {
+function FlightCard({ data, loading, isReal, enriching = false }) {
   const fl = data?.flight;
 
   return (
     <div className="bento-card fade-in" style={{ animationDelay: '120ms' }}>
       <div className="card-label-row">
         <div className="card-label">Vol</div>
-        {isReal && <RealBadge />}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {enriching && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />}
+          {isReal && <RealBadge />}
+        </div>
       </div>
       {loading ? (
         <>
@@ -991,6 +1020,8 @@ function ActivitiesCard({ data, loading, onDayClick }) {
 function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxBudget = 0, travelers = 'Solo', actualSpending = {}, setActualSpending = () => {} }) {
   const [currency, setCurrency] = useState('EUR');
   const [rates,    setRates]    = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editValue, setEditValue] = useState('');
 
   const bud        = data?.budget;
   const summary    = bud?.summary || {};
@@ -1066,15 +1097,36 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
             <div className="budget-legend">
               {Object.entries(summary).filter(([, v]) => v > 0).map(([k, v]) => {
                 const actual = actualSpending[k] || 0;
+                const isEditing = editingCategory === k;
+                const handleConfirm = () => {
+                  setActualSpending(p => ({ ...p, [k]: parseFloat(editValue) || 0 }));
+                  setEditingCategory(null);
+                };
                 return (
                   <div key={k} className="legend-row" style={{ cursor: 'pointer' }} onClick={() => {
-                    const input = prompt(`Dépenses réelles - ${BUDGET_LABELS[k]} (€):`, actual.toString());
-                    if (input !== null) setActualSpending(p => ({ ...p, [k]: parseFloat(input) || 0 }));
+                    if (!isEditing) {
+                      setEditingCategory(k);
+                      setEditValue(actual.toString());
+                    }
                   }}>
                     <div className="legend-dot" style={{ background: BUDGET_COLORS[k] }} />
                     <span className="legend-lbl">{BUDGET_LABELS[k]}</span>
                     <span className="legend-val">{conv(v)}{sym}</span>
-                    {actual > 0 && <span className="legend-actual"> | {conv(actual)}{sym} réel</span>}
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        className="legend-input"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
+                        onBlur={handleConfirm}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ marginLeft: '8px', padding: '4px 6px', fontSize: '12px', width: '70px' }}
+                      />
+                    ) : (
+                      actual > 0 && <span className="legend-actual"> | {conv(actual)}{sym} réel</span>
+                    )}
                   </div>
                 );
               })}
@@ -1666,7 +1718,7 @@ function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [dark,        setDark]        = useState(false);
+  const [dark,        setDark]        = useState(() => localStorage.getItem('theme') === 'dark');
   const [dest,        setDest]        = useState('');
   const [depCity,     setDepCity]     = useState('Paris (CDG)');
   const [dateDepart,  setDateDepart]  = useState('');
@@ -1680,6 +1732,8 @@ export default function App() {
   const [showModal,   setShowModal]   = useState(false);
   const [weatherIsLive, setWeatherIsLive] = useState(false);
   const [flightIsReal,  setFlightIsReal]  = useState(false);
+  const [enrichingWeather, setEnrichingWeather] = useState(false);
+  const [enrichingFlight, setEnrichingFlight] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [travelers, setTravelers] = useState('Solo');
   const [style, setStyle] = useState('Confort');
@@ -1688,7 +1742,16 @@ export default function App() {
   const [actualSpending, setActualSpending] = useState({});
   const [viewMode, setViewMode] = useState('grid');
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState(() => {
+    if (!dest || !dateDepart) return [];
+    try {
+      const key = `chat_${dest.toLowerCase()}_${dateDepart}`;
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [chatLoading, setChatLoading] = useState(false);
   const [highlightedDay, setHighlightedDay] = useState(null);
   const gridRef = useRef(null);
@@ -1788,6 +1851,19 @@ export default function App() {
     }
   }, [activeData?.budget?.total, maxBudget]);
 
+  useEffect(() => {
+    if (!dest || !dateDepart || chatMessages.length === 0) return;
+    try {
+      const key = `chat_${dest.toLowerCase()}_${dateDepart}`;
+      const capped = chatMessages.slice(-50);
+      localStorage.setItem(key, JSON.stringify(capped));
+    } catch {}
+  }, [chatMessages, dest, dateDepart]);
+
+  useEffect(() => {
+    localStorage.setItem('theme', dark ? 'dark' : 'light');
+  }, [dark]);
+
   const showToast = (msg) => setToast(msg);
 
   const saveAllKeys = (newKeys) => {
@@ -1835,19 +1911,26 @@ export default function App() {
     // 1. OpenWeather
     if (keys.ow && parsed.destination?.city) {
       console.log('[enrichData] Starting OpenWeather fetch for:', parsed.destination.city);
+      setEnrichingWeather(true);
       fetchRealWeather(parsed.destination.city, keys.ow)
-        .then(w => { console.log('[enrichData] OpenWeather success:', w); setData(d => d ? { ...d, weather: w } : d); setWeatherIsLive(true); })
-        .catch((err) => { console.error('[enrichData] OpenWeather error:', err.message); showToast('Météo live indisponible — données IA conservées'); });
+        .then(w => { console.log('[enrichData] OpenWeather success:', w); setData(d => d ? { ...d, weather: w } : d); setWeatherIsLive(true); setEnrichingWeather(false); })
+        .catch((err) => { console.error('[enrichData] OpenWeather error:', err.message); showToast('Météo live indisponible — données IA conservées'); setEnrichingWeather(false); });
     } else {
       console.log('[enrichData] OpenWeather skipped:', { hasKey: !!keys.ow, hasCity: !!parsed.destination?.city });
     }
 
     // 2. Amadeus
     if (keys.amadeusId && keys.amadeusSecret && parsed.flight?.to && dateDepart) {
-      getAmadeusToken(keys.amadeusId, keys.amadeusSecret)
-        .then(token => fetchRealFlight(parsed.flight.from || 'CDG', parsed.flight.to, dateDepart, token))
-        .then(fl => { setData(d => d ? { ...d, flight: fl } : d); setFlightIsReal(true); })
-        .catch(() => showToast('Vol réel indisponible — données IA conservées'));
+      const depAirport = getCityAirportCode(depCity);
+      if (depAirport === 'CDG' && !CITY_AIRPORT_MAP[depCity.trim().toLowerCase()]) {
+        showToast(`Recherche de vol impossible pour ${depCity}`);
+      } else {
+        setEnrichingFlight(true);
+        getAmadeusToken(keys.amadeusId, keys.amadeusSecret)
+          .then(token => fetchRealFlight(parsed.flight.from || depAirport, parsed.flight.to, dateDepart, token))
+          .then(fl => { setData(d => d ? { ...d, flight: fl } : d); setFlightIsReal(true); setEnrichingFlight(false); })
+          .catch(() => { showToast('Vol réel indisponible — données IA conservées'); setEnrichingFlight(false); });
+      }
     }
   };
 
@@ -1864,6 +1947,7 @@ export default function App() {
     setWeatherIsLive(false);
     setFlightIsReal(false);
     setSuggestions([]);
+    setChatMessages([]);
 
     try {
       console.log('[handlePlan] Before fetch', { d });
@@ -2242,8 +2326,8 @@ export default function App() {
         ) : (
           <main className="bento-grid" ref={gridRef}>
             <DestinationCard data={activeData} loading={activeLoading} />
-            <WeatherCard     data={activeData} loading={activeLoading} isLive={weatherIsLive} />
-            <FlightCard      data={activeData} loading={activeLoading} isReal={flightIsReal} />
+            <WeatherCard     data={activeData} loading={activeLoading} isLive={weatherIsLive} enriching={enrichingWeather} />
+            <FlightCard      data={activeData} loading={activeLoading} isReal={flightIsReal} enriching={enrichingFlight} />
             <HotelCard       data={activeData} loading={activeLoading} />
             <PracticalInfoCard data={activeData} loading={activeLoading} />
             <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} />

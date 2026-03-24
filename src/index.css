@@ -2824,3 +2824,88 @@ body {
     padding: 8px 12px;
   }
 }
+
+/* ─── PRINT STYLES ─────────────────────────────────────────────────── */
+@media print {
+  * {
+    background: white !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+
+  body {
+    background: white;
+    margin: 0;
+    padding: 10mm;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  .sidebar,
+  .header-actions,
+  .icon-btn,
+  .btn,
+  button,
+  .search-bar,
+  .chat-button,
+  [class*="btn"],
+  .top-bar > button {
+    display: none !important;
+  }
+
+  main {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+    gap: 0;
+  }
+
+  .grid-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    grid-template-columns: none;
+  }
+
+  .card {
+    page-break-inside: avoid;
+    margin-bottom: 15mm;
+    border: 1px solid #999;
+    padding: 10mm;
+    break-inside: avoid;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    color: #000 !important;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    border: 1px solid #999 !important;
+    padding: 5mm;
+    text-align: left;
+  }
+
+  a {
+    text-decoration: none;
+    color: #000 !important;
+  }
+
+  .compare-view,
+  .sidebar-container,
+  .chat-panel {
+    display: none !important;
+  }
+
+  @page {
+    margin: 10mm;
+    size: A4;
+  }
+}
