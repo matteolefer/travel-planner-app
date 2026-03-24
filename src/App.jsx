@@ -489,7 +489,7 @@ function DestinationCard({ data, loading }) {
       .catch(() => {});
   }, [city]);
 
-  const photoUrl = wikiPhoto || `https://picsum.photos/seed/${getSeed(city)}/800/600`;
+  const photoUrl = wikiPhoto || (city ? `https://picsum.photos/seed/${getSeed(city)}/800/600` : null);
   const bgStyle = city
     ? {
         backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.62) 100%),
