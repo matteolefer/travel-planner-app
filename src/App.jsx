@@ -375,15 +375,125 @@ function Sidebar({ open, trips, onLoad, onDelete, onClose }) {
   );
 }
 
+// ─── SHARE CARD (Visual export) ────────────────────────────────────────────────
+
+function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
+  if (!data) return null;
+  const city = data.destination?.city || dest;
+  const topActivities = data.activities?.slice(0, 3) || [];
+  const budget = data.budget?.total || '?';
+  const dates = data.destination?.dates || 'À déterminer';
+
+  return (
+    <div
+      style={{
+        width: 400,
+        height: 600,
+        background: '#FFFEF2',
+        borderRadius: '20px',
+        overflow: 'hidden',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}
+    >
+      {/* Top section - Photo */}
+      <div
+        style={{
+          flex: '0 0 55%',
+          backgroundImage: photoUrl ? `linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.4) 100%), url(${photoUrl})` : 'linear-gradient(135deg, #FFD60A 0%, #FF5C39 100%)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          display: 'flex',
+          alignItems: 'flex-end',
+          padding: '24px',
+          color: '#fff',
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px', fontFamily: "'Syne', sans-serif", color: '#fff' }}>
+            {city}
+          </h1>
+          <p style={{ fontSize: '12px', margin: '0', opacity: 0.9 }}>
+            {dates}
+          </p>
+        </div>
+      </div>
+
+      {/* Middle section - Activities */}
+      <div style={{ flex: '1', padding: '20px', overflowY: 'auto' }}>
+        {topActivities.length > 0 && (
+          <div>
+            <p style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', color: '#64748B', margin: '0 0 12px' }}>
+              Activités
+            </p>
+            {topActivities.map((act, i) => (
+              <div key={i} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: 'i < topActivities.length - 1 ? "1px solid rgba(10,22,40,0.1)" : "none"' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: '#0A1628', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span>{act.emoji}</span>
+                  <span>{act.name}</span>
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
+                  {act.time} · {act.tag}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom section - Budget + Logo */}
+      <div
+        style={{
+          flex: '0 0 auto',
+          padding: '16px 20px',
+          borderTop: '1px solid rgba(10,22,40,0.1)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: '#FFF',
+        }}
+      >
+        <div>
+          <p style={{ fontSize: '10px', fontWeight: '600', color: '#64748B', margin: '0 0 4px', textTransform: 'uppercase' }}>
+            Budget total
+          </p>
+          <p style={{ fontSize: '20px', fontWeight: '700', color: '#FF5C39', margin: '0' }}>
+            {budget}€
+          </p>
+        </div>
+        <div style={{ fontSize: '24px', fontWeight: '700', color: '#FF5C39', fontFamily: "'Syne', sans-serif" }}>
+          ✈️
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DESTINATION CARD ─────────────────────────────────────────────────────────
 
 function DestinationCard({ data, loading }) {
   const city    = data?.destination?.city;
+  const [wikiPhoto, setWikiPhoto] = React.useState(null);
   const getSeed = (str) => str.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000;
+
+  React.useEffect(() => {
+    if (!city) {
+      setWikiPhoto(null);
+      return;
+    }
+    fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
+      .then(r => r.json())
+      .then(d => d.thumbnail?.source && setWikiPhoto(d.thumbnail.source))
+      .catch(() => {});
+  }, [city]);
+
+  const photoUrl = wikiPhoto || `https://picsum.photos/seed/${getSeed(city)}/800/600`;
   const bgStyle = city
     ? {
         backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.62) 100%),
-          url(https://picsum.photos/seed/${getSeed(city)}/800/600)`,
+          url(${photoUrl})`,
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
       }
     : { background: 'linear-gradient(135deg, #FFD60A 0%, #FF5C39 100%)' };
@@ -517,6 +627,16 @@ function FlightCard({ data, loading, isReal, enriching = false }) {
               {fl.toCity && <div className="fl-city">{fl.toCity}</div>}
             </div>
           </div>
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              const q = `Flights from ${fl.from} to ${fl.to}${fl.date ? ` on ${fl.date}` : ''}`;
+              window.open(`https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`, '_blank');
+            }}
+            style={{ marginTop: '10px', fontSize: '12px' }}
+          >
+            Rechercher sur Google Flights
+          </button>
         </>
       ) : (
         <div className="card-empty"><Plane size={30} color="var(--text-sec)" /><span>Informations vol</span></div>
@@ -571,6 +691,26 @@ function HotelCard({ data, loading }) {
               </div>
             ) : null;
           })()}
+          {data?.destination?.city && (
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                const checkIn = h.checkIn?.replace(/\s/g, '').split('/').reverse().join('-');
+                const checkOut = h.checkOut?.replace(/\s/g, '').split('/').reverse().join('-');
+                const params = new URLSearchParams({
+                  ss: data.destination.city,
+                  checkin: checkIn || '',
+                  checkout: checkOut || '',
+                  no_rooms: '1',
+                  group_adults: '1'
+                });
+                window.open(`https://www.booking.com/searchresults.html?${params.toString()}`, '_blank');
+              }}
+              style={{ marginTop: '10px', fontSize: '12px' }}
+            >
+              Voir sur Booking.com
+            </button>
+          )}
         </div>
       ) : (
         <div className="card-empty"><Building2 size={30} color="var(--text-sec)" /><span>Réservation hôtel</span></div>
@@ -2324,15 +2464,38 @@ END:VEVENT
     }
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!data) return;
     try {
-      const shareUrl = encodeShareLink(data, dest, dateDepart, dateRetour);
-      navigator.clipboard.writeText(shareUrl);
-      showToast('Lien copié ! 🔗');
+      const container = document.createElement('div');
+      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:400px;height:600px';
+      document.body.appendChild(container);
+
+      const root = ReactDOM.createRoot(container);
+      root.render(
+        <ShareCard
+          data={data}
+          dest={dest}
+          dateDepart={dateDepart}
+          dateRetour={dateRetour}
+          photoUrl={data.destination?.photoUrl}
+        />
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const canvas = await window.html2canvas(container.firstChild, { scale: 2, useCORS: true, logging: false });
+      root.unmount();
+      document.body.removeChild(container);
+
+      const link = document.createElement('a');
+      link.download = `voyage-${(data.destination?.city || dest).toLowerCase().replace(/\s+/g, '-')}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('Image exportée ✓');
     } catch (err) {
       console.error(err);
-      showToast('Impossible de copier le lien');
+      showToast('Export image échoué');
     }
   };
 
@@ -2449,15 +2612,8 @@ END:VEVENT
                 <button className="icon-btn" title="Chat IA" onClick={() => setChatOpen(o => !o)}>💬</button>
                 <button className="icon-btn" title="Régénérer" onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
                 <button className="icon-btn" title="Comparer" onClick={() => setCompareMode(true)}><Columns size={16} /></button>
-                <button className="icon-btn" title="Partager" onClick={handleShare}>🔗</button>
-                <div className="header-dropdown">
-                  <button className="icon-btn" title="Exporter" onClick={(e) => { e.currentTarget.parentElement.classList.toggle('open'); }}><Download size={16} /></button>
-                  <div className="dropdown-menu">
-                    <button onClick={handleExport}>📸 Screenshot PDF</button>
-                    <button onClick={handleExportStructuredPDF}>📄 PDF Structuré</button>
-                    <button onClick={handleExportIcal}>📅 iCal / Google Calendar</button>
-                  </div>
-                </div>
+                <button className="icon-btn" title="Exporter image" onClick={handleShare}>📷</button>
+                <button className="icon-btn" title="Exporter calendrier" onClick={handleExportIcal}>📅</button>
                 <button className="icon-btn" title="Sauvegarder" onClick={handleSave}><Bookmark size={16} /></button>
                 <button className="icon-btn" title="Réinitialiser" onClick={handleReset}><RotateCcw size={16} /></button>
               </>
