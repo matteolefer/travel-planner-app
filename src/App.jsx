@@ -383,6 +383,15 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
   const topActivities = data.activities?.slice(0, 3) || [];
   const budget = data.budget?.total || '?';
   const dates = data.destination?.dates || 'À déterminer';
+  const [wikiPhoto, setWikiPhoto] = React.useState(photoUrl || null);
+
+  React.useEffect(() => {
+    if (wikiPhoto || !city) return;
+    fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
+      .then(r => r.json())
+      .then(d => d.thumbnail?.source && setWikiPhoto(d.thumbnail.source))
+      .catch(() => {});
+  }, [city, wikiPhoto]);
 
   return (
     <div
@@ -402,7 +411,7 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
       <div
         style={{
           flex: '0 0 55%',
-          backgroundImage: photoUrl ? `linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.4) 100%), url(${photoUrl})` : 'linear-gradient(135deg, #FFD60A 0%, #FF5C39 100%)',
+          backgroundImage: wikiPhoto ? `linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.4) 100%), url(${wikiPhoto})` : 'linear-gradient(135deg, #FFD60A 0%, #FF5C39 100%)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           display: 'flex',
