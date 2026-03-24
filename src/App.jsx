@@ -54,6 +54,24 @@ function daysBetween(d1, d2) {
   return Math.max(1, Math.ceil((new Date(d2 + 'T00:00:00') - new Date(d1 + 'T00:00:00')) / 86400000));
 }
 
+function encodeShareLink(data, dest, dateDepart, dateRetour) {
+  const payload = { data, dest, dateDepart, dateRetour };
+  const json = JSON.stringify(payload);
+  const encoded = btoa(json);
+  return `${window.location.origin}${window.location.pathname}#share=${encoded}`;
+}
+
+function decodeShareLink(hash) {
+  if (!hash.startsWith('share=')) return null;
+  try {
+    const encoded = hash.substring(6);
+    const json = atob(encoded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 const CITY_AIRPORT_MAP = {
   // France
   'paris': 'CDG', 'paris cdg': 'CDG', 'paris (cdg)': 'CDG', 'charles de gaulle': 'CDG', 'orly': 'ORY',
@@ -1907,6 +1925,20 @@ export default function App() {
   }, [dark]);
 
   useEffect(() => {
+    const hash = window.location.hash.substring(1);
+    if (!hash) return;
+    const shared = decodeShareLink(hash);
+    if (shared && shared.data) {
+      setData(shared.data);
+      setDest(shared.dest || '');
+      setDateDepart(shared.dateDepart || '');
+      setDateRetour(shared.dateRetour || '');
+      showToast('Voyage restauré à partir du lien partagé ✓');
+      window.location.hash = '';
+    }
+  }, []);
+
+  useEffect(() => {
     if (!isLoadingTripRef.current) {
       setChecked({});
     } else {
@@ -2208,6 +2240,102 @@ export default function App() {
     }
   };
 
+  const handleExportIcal = () => {
+    if (!data || !dateDepart || !dateRetour) return;
+    try {
+      const dateParts = dateDepart.split('-');
+      const startDate = `${dateParts[0]}${dateParts[1]}${dateParts[2]}`;
+      const endParts = dateRetour.split('-');
+      const endDate = `${endParts[0]}${endParts[1]}${endParts[2]}`;
+      const now = new Date().toISOString().replace(/[-:.Z]/g, '');
+
+      let ical = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Travel Planner//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Voyage à ${data.destination?.city || 'Destination'}
+X-WR-TIMEZONE:UTC
+`;
+
+      // Séjour hôtel (événement multi-jours)
+      if (data.hotel?.name) {
+        ical += `BEGIN:VEVENT
+UID:hotel-${Date.now()}@travelplanner
+DTSTAMP:${now}
+DTSTART;VALUE=DATE:${startDate}
+DTEND;VALUE=DATE:${endDate}
+SUMMARY:Hôtel: ${data.hotel.name}
+DESCRIPTION:${data.hotel.address || ''} - ${data.hotel.pricePerNight}€/nuit
+LOCATION:${data.hotel.address || data.destination?.city}
+END:VEVENT
+`;
+      }
+
+      // Vol aller
+      if (data.flight?.airline && data.flight?.date) {
+        const flightDate = data.flight.date.replace(/-/g, '');
+        const [depH, depM] = (data.flight.departure || '10:00').split(':');
+        const [arrH, arrM] = (data.flight.arrival || '14:00').split(':');
+        ical += `BEGIN:VEVENT
+UID:flight-depart-${Date.now()}@travelplanner
+DTSTAMP:${now}
+DTSTART:${flightDate}T${depH}${depM}00Z
+DTEND:${flightDate}T${arrH}${arrM}00Z
+SUMMARY:✈️ Vol ${data.flight.airline} ${data.flight.flightNumber || ''}
+DESCRIPTION:${data.flight.from || 'CDG'} → ${data.flight.to}
+LOCATION:Aéroport
+END:VEVENT
+`;
+      }
+
+      // Activités
+      data.activities?.forEach((act, idx) => {
+        if (!act.day || !act.time) return;
+        const dayOffset = Math.max(0, (act.day || 1) - 1);
+        const actDate = new Date(dateDepart);
+        actDate.setDate(actDate.getDate() + dayOffset);
+        const actDateStr = actDate.toISOString().split('T')[0].replace(/-/g, '');
+        const [h, m] = (act.time || '10:00').split(':');
+        ical += `BEGIN:VEVENT
+UID:activity-${idx}-${Date.now()}@travelplanner
+DTSTAMP:${now}
+DTSTART:${actDateStr}T${h}${m}00Z
+DURATION:PT${(act.duration || '2h').replace('h', '')}H
+SUMMARY:${act.emoji} ${act.name}
+DESCRIPTION:${act.tag || 'Activité'} - ${act.description || ''}
+LOCATION:${act.address || data.destination?.city}
+END:VEVENT
+`;
+      });
+
+      ical += `END:VCALENDAR`;
+
+      const blob = new Blob([ical], { type: 'text/calendar;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `voyage-${(data.destination?.city || 'voyage').toLowerCase().replace(/\s+/g, '-')}.ics`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      showToast('Calendrier exporté ✓');
+    } catch (err) {
+      console.error(err);
+      showToast('Export iCal échoué');
+    }
+  };
+
+  const handleShare = () => {
+    if (!data) return;
+    try {
+      const shareUrl = encodeShareLink(data, dest, dateDepart, dateRetour);
+      navigator.clipboard.writeText(shareUrl);
+      showToast('Lien copié ! 🔗');
+    } catch (err) {
+      console.error(err);
+      showToast('Impossible de copier le lien');
+    }
+  };
+
   const handleReset = () => {
     setData(null); setDest(''); setDepCity('Paris (CDG)'); setDateDepart(''); setDateRetour('');
     setWeatherIsLive(false); setFlightIsReal(false);
@@ -2321,11 +2449,13 @@ export default function App() {
                 <button className="icon-btn" title="Chat IA" onClick={() => setChatOpen(o => !o)}>💬</button>
                 <button className="icon-btn" title="Régénérer" onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
                 <button className="icon-btn" title="Comparer" onClick={() => setCompareMode(true)}><Columns size={16} /></button>
+                <button className="icon-btn" title="Partager" onClick={handleShare}>🔗</button>
                 <div className="header-dropdown">
                   <button className="icon-btn" title="Exporter" onClick={(e) => { e.currentTarget.parentElement.classList.toggle('open'); }}><Download size={16} /></button>
                   <div className="dropdown-menu">
-                    <button onClick={handleExport}>Screenshot PDF</button>
-                    <button onClick={handleExportStructuredPDF}>PDF Structuré</button>
+                    <button onClick={handleExport}>📸 Screenshot PDF</button>
+                    <button onClick={handleExportStructuredPDF}>📄 PDF Structuré</button>
+                    <button onClick={handleExportIcal}>📅 iCal / Google Calendar</button>
                   </div>
                 </div>
                 <button className="icon-btn" title="Sauvegarder" onClick={handleSave}><Bookmark size={16} /></button>
