@@ -386,7 +386,7 @@ function DestinationCard({ data, loading }) {
           url(https://picsum.photos/seed/${getSeed(city)}/800/600)`,
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
       }
-    : { background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' };
+    : { background: 'linear-gradient(135deg, #FFD60A 0%, #FF5C39 100%)' };
 
   return (
     <div className="bento-card destination-card fade-in" style={bgStyle}>
@@ -1501,7 +1501,7 @@ function InspirationCard({ onSelect }) {
   ];
 
   const gradients = [
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    'linear-gradient(135deg, #FFD60A 0%, #FF5C39 100%)',
     'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
     'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
     'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
