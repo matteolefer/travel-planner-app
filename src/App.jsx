@@ -387,10 +387,7 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
 
   React.useEffect(() => {
     if (wikiPhoto || !city) return;
-    fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
-      .then(r => r.json())
-      .then(d => d.thumbnail?.source && setWikiPhoto(d.thumbnail.source))
-      .catch(() => {});
+    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)},travel,destination`);
   }, [city, wikiPhoto]);
 
   return (
@@ -492,10 +489,7 @@ function DestinationCard({ data, loading }) {
       setWikiPhoto(null);
       return;
     }
-    fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
-      .then(r => r.json())
-      .then(d => d.thumbnail?.source && setWikiPhoto(d.thumbnail.source))
-      .catch(() => {});
+    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)},travel,destination`);
   }, [city]);
 
   const photoUrl = wikiPhoto || (city ? `https://picsum.photos/seed/${getSeed(city)}/800/600` : null);
@@ -639,8 +633,12 @@ function FlightCard({ data, loading, isReal, enriching = false }) {
           <button
             className="btn-secondary"
             onClick={() => {
-              const q = `Flights from ${fl.from} to ${fl.to}${fl.date ? ` on ${fl.date}` : ''}`;
-              window.open(`https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`, '_blank');
+              let url = `https://www.google.com/travel/explore?q=Flights+from+${fl.from}+to+${fl.to}`;
+              if (fl.date) {
+                const dateParts = fl.date.split('-');
+                if (dateParts.length === 3) url += `+on+${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+              }
+              window.open(url, '_blank');
             }}
             style={{ marginTop: '10px', fontSize: '12px' }}
           >
@@ -2394,12 +2392,20 @@ export default function App() {
   };
 
   const handleExportIcal = () => {
-    if (!data || !dateDepart || !dateRetour) return;
+    if (!data) { showToast('Données manquantes'); return; }
     try {
-      const dateParts = dateDepart.split('-');
-      const startDate = `${dateParts[0]}${dateParts[1]}${dateParts[2]}`;
-      const endParts = dateRetour.split('-');
-      const endDate = `${endParts[0]}${endParts[1]}${endParts[2]}`;
+      if (!dateDepart || !dateRetour) throw new Error('Dates manquantes');
+
+      const formatDateForIcal = (dateStr) => {
+        if (!dateStr) return '';
+        if (dateStr.includes('-')) return dateStr.replace(/-/g, '');
+        return dateStr;
+      };
+
+      const startDate = formatDateForIcal(dateDepart);
+      const endDate = formatDateForIcal(dateRetour);
+
+      if (!startDate || !endDate) throw new Error('Format de date invalide');
       const now = new Date().toISOString().replace(/[-:.Z]/g, '');
 
       let ical = `BEGIN:VCALENDAR
@@ -2445,12 +2451,14 @@ END:VEVENT
       // Activités
       data.activities?.forEach((act, idx) => {
         if (!act.day || !act.time) return;
-        const dayOffset = Math.max(0, (act.day || 1) - 1);
-        const actDate = new Date(dateDepart);
-        actDate.setDate(actDate.getDate() + dayOffset);
-        const actDateStr = actDate.toISOString().split('T')[0].replace(/-/g, '');
-        const [h, m] = (act.time || '10:00').split(':');
-        ical += `BEGIN:VEVENT
+        try {
+          const dayOffset = Math.max(0, (act.day || 1) - 1);
+          const baseDate = new Date(startDate.substring(0, 4) + '-' + startDate.substring(4, 6) + '-' + startDate.substring(6, 8) + 'T00:00:00Z');
+          const actDate = new Date(baseDate);
+          actDate.setDate(actDate.getDate() + dayOffset);
+          const actDateStr = actDate.toISOString().split('T')[0].replace(/-/g, '');
+          const [h, m] = (act.time || '10:00').split(':');
+          ical += `BEGIN:VEVENT
 UID:activity-${idx}-${Date.now()}@travelplanner
 DTSTAMP:${now}
 DTSTART:${actDateStr}T${h}${m}00Z
@@ -2460,6 +2468,9 @@ DESCRIPTION:${act.tag || 'Activité'} - ${act.description || ''}
 LOCATION:${act.address || data.destination?.city}
 END:VEVENT
 `;
+        } catch (e) {
+          console.error('Activity iCal error:', e);
+        }
       });
 
       ical += `END:VCALENDAR`;

@@ -534,6 +534,7 @@ body {
 .practical-card {
   grid-column: 3 / 4;
   grid-row: 3 / 4;
+  overflow: visible;
 }
 
 /* Budget: col 4, row 3 */
