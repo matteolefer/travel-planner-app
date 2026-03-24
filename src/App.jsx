@@ -2504,7 +2504,7 @@ END:VEVENT
               🎲
             </button>
             <button className={`btn-plan${loading ? ' loading' : ''}`} onClick={() => { console.log('[Button click] Plan clicked'); handlePlan(); }} disabled={loading}>
-              {loading ? <><Loader2 size={15} className="spin" />Planification…</> : <><Sparkles size={15} />Planifier</>}
+              {loading ? <><Loader2 size={15} className="spin" />Generating your adventure…</> : <><Sparkles size={15} />Planifier</>}
             </button>
           </div>
           {extraSteps.map((step, i) => (
