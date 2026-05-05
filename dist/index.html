@@ -4,21 +4,73 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Voyage ✈️ — Travel Planner</title>
+    <meta name="theme-color" content="#8B5CF6" />
+
+    <title>Itinera — Planificateur de voyage intelligent avec IA</title>
+    <meta name="description" content="Planifie ton prochain voyage en quelques secondes avec l'IA : itinéraire complet, hôtels, vols, météo, budget, activités et carte interactive. Gratuit, sans inscription." />
+    <meta name="keywords" content="planificateur voyage, itinéraire IA, voyage personnalisé, planning vacances, assistant voyage, générateur itinéraire, budget voyage" />
+    <meta name="author" content="Itinera" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://voyage-planner.vercel.app/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://voyage-planner.vercel.app/" />
+    <meta property="og:title" content="Itinera — Planificateur de voyage intelligent avec IA" />
+    <meta property="og:description" content="Génère un itinéraire complet pour ton prochain voyage en quelques secondes : hôtels, vols, activités, budget, météo. Gratuit." />
+    <meta property="og:image" content="https://voyage-planner.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:site_name" content="Itinera" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Itinera — Planificateur de voyage intelligent avec IA" />
+    <meta name="twitter:description" content="Génère un itinéraire complet pour ton prochain voyage en quelques secondes. Gratuit, sans inscription." />
+    <meta name="twitter:image" content="https://voyage-planner.vercel.app/og-image.png" />
+
+    <!-- JSON-LD structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Itinera",
+      "url": "https://voyage-planner.vercel.app/",
+      "description": "Planificateur de voyage intelligent propulsé par l'IA. Itinéraire complet en quelques secondes.",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
+      "featureList": [
+        "Génération d'itinéraire par IA",
+        "Multi-étapes",
+        "Comparaison de destinations",
+        "Chat IA contextuel",
+        "Export calendrier (iCal)",
+        "Carte interactive",
+        "Budget avec suivi",
+        "Packing list personnalisée"
+      ]
+    }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.0/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.0/dist/MarkerCluster.Default.css" />
-    <script type="module" crossorigin src="/assets/index-DEXsT2RH.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DqBsi6IK.css">
+    <script type="module" crossorigin src="/assets/index-BtXCiHZo.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BSHznxus.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.0/dist/leaflet.markercluster.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   </body>
 </html>

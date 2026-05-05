@@ -1,0 +1,215 @@
+{
+  "app": {
+    "title": "Itinera"
+  },
+  "search": {
+    "placeholder": "Where do you want to go?",
+    "departureCity": "Departure city",
+    "departureDate": "Departure date",
+    "returnDate": "Return date",
+    "addStep": "Add a step",
+    "surprise": "Surprise destination",
+    "plan": "Plan",
+    "planning": "Planning in progress…",
+    "apiHint": "Free — 5 generations/day. Add your own key for unlimited use.",
+    "destination": "Destination"
+  },
+  "progress": {
+    "ready": "Trip {{pct}}% ready",
+    "steps": "{{done}}/{{total}} steps"
+  },
+  "sidebar": {
+    "title": "My trips",
+    "empty": "No saved trips",
+    "delete": "Delete"
+  },
+  "hero": {
+    "title": "Where are you going this time?",
+    "sub": "Enter a destination above, or get inspired by our suggestions. Our AI builds your complete itinerary in seconds: flights, hotel, activities, budget, weather, interactive map."
+  },
+  "inspirations": {
+    "title": "Inspirations",
+    "backpackAsia": "Backpack Southeast Asia",
+    "roadtripUSA": "West Coast USA Roadtrip",
+    "cityBreak": "European City Break",
+    "honeymoon": "Maldives Honeymoon",
+    "trekSA": "South America Trek",
+    "tourMed": "Mediterranean Tour",
+    "weeks": "{{n}} wks",
+    "days": "{{n}} days"
+  },
+  "header": {
+    "myTrips": "My trips",
+    "timeline": "Timeline",
+    "grid": "Grid",
+    "chat": "AI Chat",
+    "regenerate": "Regenerate",
+    "compare": "Compare",
+    "exportImage": "Export image",
+    "exportCalendar": "Export calendar",
+    "save": "Save",
+    "reset": "Reset",
+    "settings": "API Settings",
+    "lightTheme": "Light theme",
+    "darkTheme": "Dark theme"
+  },
+  "prefs": {
+    "travelers": "Travelers",
+    "style": "Style",
+    "pace": "Pace",
+    "budgetMax": "Max budget:",
+    "solo": "Solo",
+    "couple": "Couple",
+    "family": "Family",
+    "group": "Group",
+    "backpacker": "Backpacker",
+    "comfort": "Comfort",
+    "luxury": "Luxury",
+    "busy": "Busy",
+    "relaxed": "Relaxed"
+  },
+  "cards": {
+    "weather": "Weather",
+    "flight": "Flight",
+    "realFlight": "Real flight",
+    "searchFlights": "Search on Google Flights",
+    "flightEmpty": "Flight info",
+    "hotel": "Hotel",
+    "checkIn": "Check-in",
+    "checkOut": "Check-out",
+    "perNight": "/ night",
+    "nights_one": "{{count}} night · {{total}}€ total",
+    "nights_other": "{{count}} nights · {{total}}€ total",
+    "viewBooking": "View on Booking.com",
+    "hotelEmpty": "Hotel booking",
+    "practicalInfo": "Practical Info",
+    "visa": "Visa",
+    "vaccines": "Vaccines",
+    "plug": "Power plug",
+    "currency": "Currency",
+    "timezone": "Time zone",
+    "safety": "Safety",
+    "practicalEmpty": "Practical info",
+    "activities": "Activities",
+    "regenerate": "Regenerate",
+    "activityName": "Activity name",
+    "activityTime": "Time (e.g. 14:00)",
+    "add": "Add",
+    "cancel": "Cancel",
+    "activitiesEmpty": "Planned activities",
+    "viewMaps": "View on Google Maps",
+    "budget": "Budget",
+    "budgetOver": "Over budget",
+    "exportCSV": "Export CSV",
+    "estimated": "estimated",
+    "budgetMax": "Max budget:",
+    "perPerson": "/person",
+    "dailyExpenses": "Daily expenses",
+    "day": "Day",
+    "housing": "Housing",
+    "food": "Food",
+    "transport": "Transport",
+    "activitiesLabel": "Activities",
+    "total": "Total",
+    "actual": "actual",
+    "budgetEmpty": "Budget tracker",
+    "packingList": "Packing List",
+    "itemsReady": "{{done}}/{{total}} items packed",
+    "essentials": "Essentials",
+    "clothes": "Clothes",
+    "gear": "Gear",
+    "health": "Health",
+    "newItem": "New item...",
+    "packingEmpty": "Packing list",
+    "notes": "Notes",
+    "notesPlaceholder": "Your travel notes…",
+    "map": "Map",
+    "tbd": "To be determined",
+    "destPlaceholder": "Your next destination…"
+  },
+  "modal": {
+    "description": "Description",
+    "duration": "Duration",
+    "estimatedPrice": "Estimated price",
+    "address": "Address",
+    "schedule": "Schedule",
+    "category": "Category"
+  },
+  "settings": {
+    "title": "API Keys",
+    "hint": "Keys stored in session memory. OpenWeather and Amadeus keys are optional (real-time enrichment).",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "compare": {
+    "title": "Destination comparison",
+    "weather": "Weather",
+    "hotelPerNight": "Hotel/night",
+    "totalBudget": "Total budget",
+    "activities": "Activities",
+    "activitiesCount": "{{count}} activities",
+    "safety": "Safety",
+    "choose": "Choose this one",
+    "plan": "Plan"
+  },
+  "chat": {
+    "title": "AI Assistant",
+    "placeholder": "Ask a question...",
+    "systemPrompt": "You are a friendly travel assistant. Answer in 2-3 short sentences, in natural language, no JSON, no markdown, no lists."
+  },
+  "timeline": {
+    "noActivities": "No activities",
+    "day": "Day {{n}}",
+    "step": "Step {{n}}"
+  },
+  "suggestions": {
+    "label": "Similar destinations"
+  },
+  "toast": {
+    "enterDest": "Please enter a destination",
+    "dateError": "Return date must be after departure",
+    "sharedRestored": "Trip restored from shared link ✓",
+    "budgetOver": "⚠️ Over budget: {{total}}€ > {{max}}€",
+    "keysSaved": "Keys saved ✓",
+    "tripSaved": "Trip saved ✓",
+    "weatherUnavailable": "Live weather unavailable — AI data kept",
+    "flightSearchFailed": "Flight search failed for {{city}}",
+    "flightUnavailable": "Real flight unavailable — AI data kept",
+    "dataMissing": "Missing data",
+    "datesMissing": "Missing dates",
+    "dateFormatInvalid": "Invalid date format",
+    "calendarExported": "Calendar exported ✓",
+    "calendarFailed": "iCal export failed",
+    "imageExported": "Image exported ✓",
+    "imageFailed": "Image export failed",
+    "regenerating": "Generating a new version…",
+    "surpriseFailed": "Unable to generate a surprise destination",
+    "stepError": "Step {{n}}: {{message}}"
+  },
+  "filters": {
+    "all": "All",
+    "culture": "Culture",
+    "food": "Food",
+    "nature": "Nature",
+    "entertainment": "Entertainment"
+  },
+  "budgetLabels": {
+    "housing": "Housing",
+    "food": "Food",
+    "transport": "Transport",
+    "activities": "Activities",
+    "other": "Other"
+  },
+  "share": {
+    "activities": "Activities",
+    "totalBudget": "Total budget"
+  },
+  "errors": {
+    "rateLimited": "Mistral returned 429 — try again in a moment.",
+    "quotaExhausted": "You've reached the free daily limit. Add your own Mistral key in ⚙️ for unlimited use.",
+    "invalidJson": "The AI returned an unexpected format — please try again.",
+    "network": "Network error — check your connection.",
+    "invalidKey": "Invalid or unauthorized API key.",
+    "unknown": "An error occurred."
+  }
+}

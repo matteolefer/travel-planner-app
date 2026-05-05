@@ -1,24 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { useTranslation } from 'react-i18next';
 import {
   Sun, Cloud, CloudRain, CloudSnow, Plane, Building2, MapPin,
   Wallet, CheckSquare2, FileText, Moon, RotateCcw, Sparkles,
   Loader2, X, Star, Clock, Key, ChevronRight,
-  Bookmark, Trash2, Menu, Settings, Download, Plus, Columns,
-  LayoutGrid, LayoutList,
+  Bookmark, Trash2, Menu, Settings, Plus, Columns,
+  LayoutGrid, LayoutList, Globe,
 } from 'lucide-react';
+import { generateTrip, chat as chatAi, getSuggestions, surpriseMeCity, regenerateActivity, classifyAiError } from './api/ai.js';
+import { fetchRealWeather } from './api/weather.js';
+import { getAmadeusToken, fetchRealFlight } from './api/flights.js';
+import { fetchExchangeRates } from './api/exchange.js';
+import { fmtDate, daysBetween } from './lib/date.js';
+import { decodeShareLink } from './lib/share.js';
+import { CITY_AIRPORT_MAP, getCityAirportCode } from './lib/airports.js';
+import { loadSavedTrips, ssGet, ssSet } from './lib/storage.js';
+import useDocumentTitle from './hooks/useDocumentTitle.js';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-
-const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
-const OW_API_URL      = 'https://api.openweathermap.org/data/2.5/forecast';
-const AMADEUS_TOKEN   = 'https://test.api.amadeus.com/v1/security/oauth2/token';
-const AMADEUS_FLIGHTS = 'https://test.api.amadeus.com/v2/shopping/flight-offers';
-const EXCHANGE_URL    = 'https://open.er-api.com/v6/latest/EUR';
 
 const CURRENCIES       = ['EUR', 'USD', 'GBP', 'JPY', 'THB', 'MAD', 'AED', 'CHF', 'CAD'];
 const CURRENCY_SYMBOLS = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', THB: '฿', MAD: 'DH', AED: 'AED', CHF: 'Fr', CAD: 'C$' };
 
-const SYSTEM_PROMPT = `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de backticks) avec cette structure exacte :
+const SYSTEM_PROMPTS = {
+  fr: `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON valide (pas de markdown, pas de backticks) avec cette structure exacte :
 {
   "destination": { "city": "", "country": "", "dates": "Ex: 15-22 Mars 2026", "highlights": ["À ne pas manquer 1", "À ne pas manquer 2", "À ne pas manquer 3"] },
   "weather": { "temp": "22°C", "condition": "Ensoleillé", "forecast": [{"day": "Lun", "temp": 18}, {"day": "Mar", "temp": 20}, {"day": "Mer", "temp": 22}, {"day": "Jeu", "temp": 21}, {"day": "Ven", "temp": 19}] },
@@ -31,10 +37,26 @@ const SYSTEM_PROMPT = `Tu es un expert en voyage. Réponds UNIQUEMENT en JSON va
   "notes": "",
   "transport": { "mode": "avion", "duration": "3h30", "price": "250€", "from": "Paris", "to": "Tokyo" }
 }
-Les tags doivent être exactement "culture", "food", "nature" ou "divertissement". Adapte la météo à la saison des dates fournies. Considère les préférences utilisateur (nombre de voyageurs, style, rythme, budget) pour adapter le contenu. Les catégories de packingList doivent être adaptées à la destination ET la saison (hiver = manteau, tropique = anti-moustiques, etc). Pour le budget, fournis une répartition détaillée par jour (housing, food, transport, activities) dans perDay et un résumé par catégorie dans summary. Pour l'étape 1 (voyage direct), transport doit être null. Pour les étapes suivantes, renseigne le transport depuis la ville précédente. IMPORTANT: Pour chaque activité et hôtel, les coordonnées lat/lng doivent être précises et non nulles (ex: Paris = 48.8566, 2.3522). Ne jamais renvoyer lat: 0 ou lng: 0.`;
+Les tags doivent être exactement "culture", "food", "nature" ou "divertissement". Adapte la météo à la saison des dates fournies. Considère les préférences utilisateur (nombre de voyageurs, style, rythme, budget) pour adapter le contenu. Les catégories de packingList doivent être adaptées à la destination ET la saison (hiver = manteau, tropique = anti-moustiques, etc). Pour le budget, fournis une répartition détaillée par jour (housing, food, transport, activities) dans perDay et un résumé par catégorie dans summary. Pour l'étape 1 (voyage direct), transport doit être null. Pour les étapes suivantes, renseigne le transport depuis la ville précédente. IMPORTANT: Pour chaque activité et hôtel, les coordonnées lat/lng doivent être précises et non nulles (ex: Paris = 48.8566, 2.3522). Ne jamais renvoyer lat: 0 ou lng: 0.`,
+  en: `You are a travel expert. Reply ONLY with valid JSON (no markdown, no backticks) using this exact structure:
+{
+  "destination": { "city": "", "country": "", "dates": "Ex: Mar 15-22, 2026", "highlights": ["Must see 1", "Must see 2", "Must see 3"] },
+  "weather": { "temp": "22°C", "condition": "Sunny", "forecast": [{"day": "Mon", "temp": 18}, {"day": "Tue", "temp": 20}, {"day": "Wed", "temp": 22}, {"day": "Thu", "temp": 21}, {"day": "Fri", "temp": 19}] },
+  "flight": { "airline": "", "departure": "10:30", "arrival": "14:45", "flightNumber": "", "date": "2026-03-15", "from": "CDG", "fromCity": "Paris", "to": "", "toCity": "" },
+  "hotel": { "name": "", "stars": 4, "address": "", "checkIn": "", "checkOut": "", "pricePerNight": 120, "lat": 0.0, "lng": 0.0 },
+  "activities": [{ "day": 1, "emoji": "", "name": "", "time": "", "tag": "culture", "description": "", "duration": "2h", "price": "15€", "address": "", "travelTimeFromPrev": "~15 min walk", "lat": 48.8566, "lng": 2.3522 }],
+  "budget": { "total": 1500, "perDay": [{ "day": 1, "housing": 0, "food": 0, "transport": 0, "activities": 0 }], "summary": { "housing": 0, "food": 0, "transport": 0, "activities": 0, "other": 0 } },
+  "packingList": { "essentials": ["Passport", "Credit card", "Travel insurance"], "clothes": ["Light T-shirts", "Shorts", "Swimsuit"], "gear": ["Sunscreen SPF50", "Plug adapter", "Water bottle"], "health": ["Personal meds", "Mosquito repellent"] },
+  "practicalInfo": { "visa": "", "vaccines": "", "plug": "", "currency": "", "timezone": "", "safety": "", "safetyLevel": 3, "warnings": "" },
+  "notes": "",
+  "transport": { "mode": "plane", "duration": "3h30", "price": "250€", "from": "Paris", "to": "Tokyo" }
+}
+Tags must be exactly "culture", "food", "nature" or "divertissement". Adapt weather to the season of the given dates. Consider user preferences (number of travelers, style, pace, budget) to adapt content. PackingList categories must be adapted to both destination AND season (winter = coat, tropics = mosquito repellent, etc). For budget, provide a detailed daily breakdown (housing, food, transport, activities) in perDay and a category summary in summary. For step 1 (direct trip), transport must be null. For subsequent steps, fill in transport from the previous city. IMPORTANT: For each activity and hotel, lat/lng coordinates must be precise and non-null (e.g. Paris = 48.8566, 2.3522). Never return lat: 0 or lng: 0.`,
+};
+
+function getSystemPrompt(lang = 'fr') { return SYSTEM_PROMPTS[lang] || SYSTEM_PROMPTS.fr; }
 
 const BUDGET_COLORS = { housing: '#8B5CF6', food: '#EC4899', transport: '#10B981', activities: '#F59E0B', other: '#6B7280' };
-const BUDGET_LABELS = { housing: 'Logement', food: 'Nourriture', transport: 'Transport', activities: 'Activités', other: 'Autre' };
 const TAG_STYLES    = {
   culture:       { bg: 'rgba(59,130,246,0.12)',  color: '#3B82F6' },
   food:          { bg: 'rgba(245,158,11,0.12)',  color: '#D97706' },
@@ -42,82 +64,26 @@ const TAG_STYLES    = {
   divertissement: { bg: 'rgba(168,85,247,0.12)',  color: '#A855F7' },
 };
 
-// ─── UTILS ────────────────────────────────────────────────────────────────────
+// ─── UTILS (message builder only — date/airport/storage/share moved to src/lib) ─
 
-function fmtDate(iso) {
-  if (!iso) return '';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
-function daysBetween(d1, d2) {
-  if (!d1 || !d2) return null;
-  return Math.max(1, Math.ceil((new Date(d2 + 'T00:00:00') - new Date(d1 + 'T00:00:00')) / 86400000));
-}
-
-function encodeShareLink(data, dest, dateDepart, dateRetour) {
-  const payload = { data, dest, dateDepart, dateRetour };
-  const json = JSON.stringify(payload);
-  const encoded = btoa(json);
-  return `${window.location.origin}${window.location.pathname}#share=${encoded}`;
-}
-
-function decodeShareLink(hash) {
-  if (!hash.startsWith('share=')) return null;
-  try {
-    const encoded = hash.substring(6);
-    const json = atob(encoded);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-const CITY_AIRPORT_MAP = {
-  // France
-  'paris': 'CDG', 'paris cdg': 'CDG', 'paris (cdg)': 'CDG', 'charles de gaulle': 'CDG', 'orly': 'ORY',
-  'lyon': 'LYS', 'marseille': 'MRS', 'nice': 'NCE', 'toulouse': 'TLS', 'bordeaux': 'BOD', 'nantes': 'NTE',
-  'lille': 'LIL', 'strasbourg': 'SXB', 'montpellier': 'MPL', 'grenoble': 'GNB', 'toulon': 'TLN',
-  // Europe
-  'geneva': 'GVA', 'zurich': 'ZRH', 'basel': 'BSL', 'bern': 'BRN',
-  'london': 'LHR', 'manchester': 'MAN', 'edinburgh': 'EDI', 'dublin': 'DUB',
-  'berlin': 'BER', 'munich': 'MUC', 'frankfurt': 'FRA', 'cologne': 'CGN', 'hamburg': 'HAM',
-  'amsterdam': 'AMS', 'rotterdam': 'RTM', 'barcelona': 'BCN', 'madrid': 'MAD', 'malaga': 'AGP',
-  'lisbon': 'LIS', 'lisbonne': 'LIS', 'porto': 'OPO', 'rome': 'FCO', 'milan': 'MXP', 'milano': 'MXP',
-  'venice': 'VCE', 'venice (marco polo)': 'VCE', 'vienna': 'VIE', 'prague': 'PRG', 'budapest': 'BUD',
-  'warsaw': 'WAW', 'krakow': 'KRK', 'athens': 'ATH', 'istanbul': 'IST', 'marrakech': 'RAK',
-  // Africa & Middle East
-  'dubai': 'DXB', 'abu dhabi': 'AUH', 'cape town': 'CPT', 'johannesburg': 'JNB', 'cairo': 'CAI',
-  'casablanca': 'CMN', 'tangier': 'TNG', 'accra': 'ACC', 'lagos': 'LOS',
-  // Asia
-  'singapore': 'SIN', 'singapore changi': 'SIN', 'bali': 'DPS', 'denpasar': 'DPS', 'bangkok': 'BKK',
-  'chiang mai': 'CNX', 'phuket': 'HKT', 'hanoi': 'HAN', 'ho chi minh city': 'SGN', 'saigon': 'SGN',
-  'phnom penh': 'PNH', 'kuala lumpur': 'KUL', 'manila': 'MNL', 'hong kong': 'HKG', 'macau': 'MFM',
-  'shanghai': 'PVG', 'beijing': 'PEI', 'guangzhou': 'CAN', 'tokyo': 'NRT', 'narita': 'NRT', 'haneda': 'HND',
-  'osaka': 'KIX', 'kyoto': 'KIX', 'seoul': 'ICN', 'mumbai': 'BOM', 'delhi': 'DEL', 'bangalore': 'BLR',
-  'bangkok': 'BKK', 'pattaya': 'BKK', 'new delhi': 'DEL',
-  // Americas
-  'new york': 'JFK', 'new york (jfk)': 'JFK', 'newark': 'EWR', 'los angeles': 'LAX', 'las vegas': 'LAS',
-  'san francisco': 'SFO', 'san diego': 'SAN', 'seattle': 'SEA', 'chicago': 'ORD', 'miami': 'MIA',
-  'toronto': 'YYZ', 'montreal': 'YUL', 'vancouver': 'YVR', 'mexico city': 'MEX', 'cancun': 'CUN',
-  'bahamas': 'NAS', 'nassau': 'NAS', 'havana': 'HAV', 'lima': 'LIM', 'cusco': 'CUZ', 'buenos aires': 'AEP',
-  'sao paulo': 'GIG', 'rio de janeiro': 'RIO', 'cartagena': 'CTG', 'bogota': 'BOG',
-  // Oceania
-  'sydney': 'SYD', 'melbourne': 'MEL', 'brisbane': 'BNE', 'perth': 'PER', 'auckland': 'AKL',
-  'fiji': 'NAN', 'tahiti': 'PPT', 'samoa': 'APW',
-};
-
-function getCityAirportCode(cityInput) {
-  if (!cityInput) return 'CDG';
-  const normalized = cityInput.trim().toLowerCase();
-  return CITY_AIRPORT_MAP[normalized] || 'CDG';
-}
-
-function buildUserMessage(dest, dateDepart, dateRetour, depCity = 'Paris (CDG)', prefs = {}, stepContext = null) {
+function buildUserMessage(dest, dateDepart, dateRetour, depCity = 'Paris (CDG)', prefs = {}, stepContext = null, lang = 'fr') {
   const { travelers = 'Solo', style = 'Confort', pace = 'Chargé', maxBudget = 5000 } = prefs;
+  if (lang === 'en') {
+    let msg = `Plan a trip to ${dest} departing from ${depCity}`;
+    if (dateDepart && dateRetour) {
+      const days = daysBetween(dateDepart, dateRetour);
+      msg += ` from ${fmtDate(dateDepart, 'en')} to ${fmtDate(dateRetour, 'en')}. Generate ${days * 2} to ${days * 3} activities spread over ${days} days (field "day" from 1 to ${days}), and check-in/check-out dates must match the trip dates.`;
+    } else {
+      msg += `. Generate 5-6 varied activities with the "day" field set to 1.`;
+    }
+    msg += ` Preferences: ${travelers} traveler(s), style ${style}, pace ${pace}, max budget ${maxBudget}€.`;
+    if (stepContext) msg = `Step ${stepContext.stepN}/${stepContext.total} of the trip. Coming from ${stepContext.prevCity}. ` + msg;
+    return msg;
+  }
   let msg = `Planifie un voyage à ${dest} au départ de ${depCity}`;
   if (dateDepart && dateRetour) {
     const days = daysBetween(dateDepart, dateRetour);
-    msg += ` du ${fmtDate(dateDepart)} au ${fmtDate(dateRetour)}. Génère ${days * 2} à ${days * 3} activités réparties sur ${days} jours (champ "day" de 1 à ${days}), et les dates de check-in/check-out correspondent aux dates du voyage.`;
+    msg += ` du ${fmtDate(dateDepart, 'fr')} au ${fmtDate(dateRetour, 'fr')}. Génère ${days * 2} à ${days * 3} activités réparties sur ${days} jours (champ "day" de 1 à ${days}), et les dates de check-in/check-out correspondent aux dates du voyage.`;
   } else {
     msg += `. Génère 5-6 activités variées avec le champ "day" à 1.`;
   }
@@ -126,106 +92,8 @@ function buildUserMessage(dest, dateDepart, dateRetour, depCity = 'Paris (CDG)',
   return msg;
 }
 
-function loadSavedTrips() {
-  try { return JSON.parse(localStorage.getItem('saved_trips') || '[]'); }
-  catch { return []; }
-}
-
-function ssGet(key) { return sessionStorage.getItem(key) || ''; }
-function ssSet(key, val) { sessionStorage.setItem(key, val); }
-
-// ─── EXTERNAL API HELPERS ─────────────────────────────────────────────────────
-
-async function fetchRealWeather(city, apiKey) {
-  const url = `${OW_API_URL}?q=${encodeURIComponent(city)}&units=metric&lang=fr&cnt=40&appid=${apiKey}`;
-  console.log('[fetchRealWeather] Calling OpenWeather', { city, url: url.replace(apiKey, '***') });
-  const res  = await fetch(url);
-  console.log('[fetchRealWeather] Response status:', res.status);
-  if (!res.ok) throw new Error(`OpenWeather ${res.status}`);
-  const json = await res.json();
-  console.log('[fetchRealWeather] Data received:', { temp: json.list[0]?.main?.temp, condition: json.list[0]?.weather[0]?.description });
-
-  const temp      = Math.round(json.list[0].main.temp);
-  const condition = json.list[0].weather[0].description;
-
-  // Pick noon reading per day for forecast
-  const dayMap = {};
-  for (const item of json.list) {
-    const [date, time] = item.dt_txt.split(' ');
-    if (!dayMap[date] || time === '12:00:00') dayMap[date] = Math.round(item.main.temp);
-  }
-  const forecast = Object.values(dayMap).slice(0, 5);
-  console.log("[fetchRealWeather] Forecast details:", forecast);
-
-  return { temp: `${temp}°C`, condition, forecast };
-}
-
-async function getAmadeusToken(clientId, clientSecret) {
-  const res = await fetch(AMADEUS_TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }),
-  });
-  if (!res.ok) throw new Error(`Amadeus auth ${res.status}`);
-  const json = await res.json();
-  return json.access_token;
-}
-
-async function fetchRealFlight(iataFrom, iataTo, departureDate, token) {
-  const params = new URLSearchParams({
-    originLocationCode:      iataFrom || 'CDG',
-    destinationLocationCode: iataTo,
-    departureDate,
-    adults: '1',
-    max:    '1',
-    currencyCode: 'EUR',
-  });
-  const res = await fetch(`${AMADEUS_FLIGHTS}?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Amadeus flights ${res.status}`);
-  const json   = await res.json();
-  const offer  = json.data?.[0];
-  if (!offer)  throw new Error('Aucun vol trouvé');
-
-  const seg         = offer.itineraries[0].segments[0];
-  const carrierCode = offer.validatingAirlineCodes?.[0] || seg.carrierCode;
-  const airlineName = json.dictionaries?.carriers?.[carrierCode] || carrierCode;
-
-  return {
-    airline:      airlineName,
-    departure:    seg.departure.at.slice(11, 16),
-    arrival:      seg.arrival.at.slice(11, 16),
-    flightNumber: `${seg.carrierCode}${seg.number}`,
-    from:         seg.departure.iataCode,
-    to:           seg.arrival.iataCode,
-    price:        offer.price?.grandTotal ? `${Math.round(offer.price.grandTotal)}€` : null,
-  };
-}
-
-async function fetchExchangeRates() {
-  const res = await fetch(EXCHANGE_URL);
-  if (!res.ok) throw new Error('Exchange rates unavailable');
-  const json = await res.json();
-  return json.rates;
-}
-
-async function fetchSuggestions(destination, apiKey) {
-  const res = await fetch(MISTRAL_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'mistral-small-latest',
-      messages: [{ role: 'user', content: `Suggère 3 destinations similaires à ${destination}. Réponds UNIQUEMENT en JSON: { "suggestions": [{ "city": "", "country": "", "emoji": "", "reason": "" }] }. Reason max 10 mots.` }],
-      temperature: 0.8,
-      response_format: { type: 'json_object' },
-    }),
-  });
-  const json = await res.json();
-  const raw = json.choices?.[0]?.message?.content || '{}';
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-  return JSON.parse(cleaned).suggestions || [];
-}
+// fetchSuggestions est désormais fourni par src/api/ai.js (getSuggestions) —
+// supporte le proxy serveur et la clé user en mode hybride.
 
 // ─── SMALL HELPERS ────────────────────────────────────────────────────────────
 
@@ -258,8 +126,9 @@ function LiveBadge() {
   );
 }
 
-function RealBadge({ label = 'Vrai vol' }) {
-  return <div className="real-badge">{label} ✓</div>;
+function RealBadge() {
+  const { t } = useTranslation();
+  return <div className="real-badge">{t('cards.realFlight')} ✓</div>;
 }
 
 // ─── DONUT CHART ──────────────────────────────────────────────────────────────
@@ -306,6 +175,7 @@ function Toast({ message, onClose }) {
 // ─── PROGRESS BAR ─────────────────────────────────────────────────────────────
 
 function ProgressBar({ data, checked }) {
+  const { t } = useTranslation();
   const cardKeys    = ['destination', 'weather', 'flight', 'hotel', 'activities', 'budget'];
   const filledCards = data ? cardKeys.filter(k => {
     if (k === 'destination') return !!data.destination?.city;
@@ -328,8 +198,8 @@ function ProgressBar({ data, checked }) {
   return (
     <div className="progress-section">
       <div className="progress-header">
-        <span className="progress-label">Voyage prêt à {pct}%</span>
-        <span className="progress-steps">{done}/{total} étapes</span>
+        <span className="progress-label">{t('progress.ready', { pct })}</span>
+        <span className="progress-steps">{t('progress.steps', { done, total })}</span>
       </div>
       <div className="progress-track">
         <div className="progress-fill" style={{ width: `${pct}%` }} />
@@ -341,18 +211,19 @@ function ProgressBar({ data, checked }) {
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 
 function Sidebar({ open, trips, onLoad, onDelete, onClose }) {
+  const { t } = useTranslation();
   return (
     <>
       {open && <div className="sidebar-backdrop" onClick={onClose} />}
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <span className="sidebar-title">Mes voyages</span>
+          <span className="sidebar-title">{t('sidebar.title')}</span>
           <button className="sidebar-close icon-btn" onClick={onClose}><X size={16} /></button>
         </div>
         {trips.length === 0 ? (
           <div className="sidebar-empty">
             <Bookmark size={28} color="var(--text-sec)" style={{ opacity: 0.4 }} />
-            <p>Aucun voyage sauvegardé</p>
+            <p>{t('sidebar.empty')}</p>
           </div>
         ) : (
           <ul className="sidebar-list">
@@ -362,7 +233,7 @@ function Sidebar({ open, trips, onLoad, onDelete, onClose }) {
                   <span className="sidebar-city">{trip.city}</span>
                   <span className="sidebar-dates">{trip.dates}</span>
                 </div>
-                <button className="sidebar-delete" title="Supprimer"
+                <button className="sidebar-delete" title={t('sidebar.delete')}
                   onClick={e => { e.stopPropagation(); onDelete(trip.id); }}>
                   <Trash2 size={14} />
                 </button>
@@ -377,17 +248,25 @@ function Sidebar({ open, trips, onLoad, onDelete, onClose }) {
 
 // ─── SHARE CARD (Visual export) ────────────────────────────────────────────────
 
-function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
+function ShareCard({ data, dest, photoUrl }) {
   if (!data) return null;
   const city = data.destination?.city || dest;
   const topActivities = data.activities?.slice(0, 3) || [];
   const budget = data.budget?.total || '?';
-  const dates = data.destination?.dates || 'À déterminer';
+  const { t } = useTranslation();
+  const dates = data.destination?.dates || t('cards.tbd');
   const [wikiPhoto, setWikiPhoto] = React.useState(photoUrl || null);
 
   React.useEffect(() => {
     if (wikiPhoto || !city) return;
-    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)}`);
+    fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
+      .then(r => r.json())
+      .then(d => {
+        const url = d.originalimage?.source || d.thumbnail?.source;
+        if (url) setWikiPhoto(url);
+        else setWikiPhoto(`https://picsum.photos/seed/${city.length * 7}/800/600`);
+      })
+      .catch(() => setWikiPhoto(`https://picsum.photos/seed/${city.length * 7}/800/600`));
   }, [city, wikiPhoto]);
 
   return (
@@ -432,10 +311,10 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
         {topActivities.length > 0 && (
           <div>
             <p style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', color: '#64748B', margin: '0 0 12px' }}>
-              Activités
+              {t('share.activities')}
             </p>
             {topActivities.map((act, i) => (
-              <div key={i} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: 'i < topActivities.length - 1 ? "1px solid rgba(10,22,40,0.1)" : "none"' }}>
+              <div key={i} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: i < topActivities.length - 1 ? '1px solid rgba(10,22,40,0.1)' : 'none' }}>
                 <div style={{ fontSize: '12px', fontWeight: '600', color: '#0A1628', display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <span>{act.emoji}</span>
                   <span>{act.name}</span>
@@ -463,7 +342,7 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
       >
         <div>
           <p style={{ fontSize: '10px', fontWeight: '600', color: '#64748B', margin: '0 0 4px', textTransform: 'uppercase' }}>
-            Budget total
+            {t('share.totalBudget')}
           </p>
           <p style={{ fontSize: '20px', fontWeight: '700', color: '#FF5C39', margin: '0' }}>
             {budget}€
@@ -480,16 +359,21 @@ function ShareCard({ data, dest, dateDepart, dateRetour, photoUrl }) {
 // ─── DESTINATION CARD ─────────────────────────────────────────────────────────
 
 function DestinationCard({ data, loading }) {
+  const { t } = useTranslation();
   const city    = data?.destination?.city;
   const [wikiPhoto, setWikiPhoto] = React.useState(null);
   const getSeed = (str) => str.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 1000;
 
   React.useEffect(() => {
-    if (!city) {
-      setWikiPhoto(null);
-      return;
-    }
-    setWikiPhoto(`https://source.unsplash.com/800x600/?${encodeURIComponent(city)}`);
+    if (!city) { setWikiPhoto(null); return; }
+    fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`)
+      .then(r => r.json())
+      .then(d => {
+        const url = d.originalimage?.source || d.thumbnail?.source;
+        if (url) setWikiPhoto(url);
+        else setWikiPhoto(`https://picsum.photos/seed/${getSeed(city)}/800/600`);
+      })
+      .catch(() => setWikiPhoto(`https://picsum.photos/seed/${getSeed(city)}/800/600`));
   }, [city]);
 
   const photoUrl = wikiPhoto || (city ? `https://picsum.photos/seed/${getSeed(city)}/800/600` : null);
@@ -525,7 +409,7 @@ function DestinationCard({ data, loading }) {
       ) : (
         <div className="dest-placeholder">
           <Plane size={52} color="rgba(255,255,255,0.25)" />
-          <p>Votre prochaine destination…</p>
+          <p>{t('cards.destPlaceholder')}</p>
         </div>
       )}
     </div>
@@ -535,13 +419,14 @@ function DestinationCard({ data, loading }) {
 // ─── WEATHER CARD ─────────────────────────────────────────────────────────────
 
 function WeatherCard({ data, loading, isLive, enriching = false }) {
+  const { t } = useTranslation();
   const w    = data?.weather;
   const maxT = w?.forecast?.length ? Math.max(...w.forecast.map(f => f.temp || f)) : 1;
 
   return (
     <div className="bento-card fade-in" style={{ animationDelay: '60ms' }}>
       <div className="card-label-row">
-        <div className="card-label">Météo</div>
+        <div className="card-label">{t('cards.weather')}</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {enriching && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />}
           {isLive && <LiveBadge />}
@@ -579,7 +464,7 @@ function WeatherCard({ data, loading, isLive, enriching = false }) {
           </div>
         </>
       ) : (
-        <div className="card-empty"><Sun size={30} color="var(--text-sec)" /><span>Météo</span></div>
+        <div className="card-empty"><Sun size={30} color="var(--text-sec)" /><span>{t('cards.weather')}</span></div>
       )}
     </div>
   );
@@ -588,12 +473,13 @@ function WeatherCard({ data, loading, isLive, enriching = false }) {
 // ─── FLIGHT CARD ──────────────────────────────────────────────────────────────
 
 function FlightCard({ data, loading, isReal, enriching = false }) {
+  const { t, i18n } = useTranslation();
   const fl = data?.flight;
 
   return (
     <div className="bento-card fade-in" style={{ animationDelay: '120ms' }}>
       <div className="card-label-row">
-        <div className="card-label">Vol</div>
+        <div className="card-label">{t('cards.flight')}</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {enriching && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />}
           {isReal && <RealBadge />}
@@ -616,7 +502,7 @@ function FlightCard({ data, loading, isReal, enriching = false }) {
             ✈ {fl.flightNumber}
             {fl.price && <span className="fl-price">{fl.price}</span>}
           </div>
-          {fl.date && <div style={{fontSize: '12px', color: 'var(--text-sec)', marginBottom: '8px'}}>{fmtDate(fl.date)}</div>}
+          {fl.date && <div style={{fontSize: '12px', color: 'var(--text-sec)', marginBottom: '8px'}}>{fmtDate(fl.date, i18n.language)}</div>}
           <div className="fl-route">
             <div className="fl-point">
               <div className="fl-time">{fl.departure}</div>
@@ -637,11 +523,11 @@ function FlightCard({ data, loading, isReal, enriching = false }) {
             }}
             style={{ marginTop: '10px', fontSize: '12px' }}
           >
-            Rechercher sur Google Flights
+            {t('cards.searchFlights')}
           </button>
         </>
       ) : (
-        <div className="card-empty"><Plane size={30} color="var(--text-sec)" /><span>Informations vol</span></div>
+        <div className="card-empty"><Plane size={30} color="var(--text-sec)" /><span>{t('cards.flightEmpty')}</span></div>
       )}
     </div>
   );
@@ -650,11 +536,12 @@ function FlightCard({ data, loading, isReal, enriching = false }) {
 // ─── HOTEL CARD ───────────────────────────────────────────────────────────────
 
 function HotelCard({ data, loading }) {
+  const { t } = useTranslation();
   const h = data?.hotel;
 
   return (
     <div className="bento-card hotel-card fade-in" style={{ animationDelay: '180ms' }}>
-      <div className="card-label">Hôtel</div>
+      <div className="card-label">{t('cards.hotel')}</div>
       {loading ? (
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
@@ -673,15 +560,15 @@ function HotelCard({ data, loading }) {
           </div>
           <div className="hotel-dates">
             <div>
-              <div className="date-lbl">Check-in</div>
+              <div className="date-lbl">{t('cards.checkIn')}</div>
               <div className="date-val">{h.checkIn}</div>
             </div>
             <div className="hotel-price-box">
               <div className="hotel-price">{h.pricePerNight}€</div>
-              <div className="per-night">/ nuit</div>
+              <div className="per-night">{t('cards.perNight')}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="date-lbl">Check-out</div>
+              <div className="date-lbl">{t('cards.checkOut')}</div>
               <div className="date-val">{h.checkOut}</div>
             </div>
           </div>
@@ -689,7 +576,7 @@ function HotelCard({ data, loading }) {
             const nights = daysBetween(h.checkIn, h.checkOut);
             return nights > 0 ? (
               <div style={{ fontSize: '12px', color: 'var(--text-sec)', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
-                <div>{nights} nuit{nights > 1 ? 's' : ''} · {h.pricePerNight * nights}€ total</div>
+                <div>{t('cards.nights', { count: nights, total: h.pricePerNight * nights })}</div>
               </div>
             ) : null;
           })()}
@@ -720,12 +607,12 @@ function HotelCard({ data, loading }) {
               }}
               style={{ marginTop: '10px', fontSize: '12px' }}
             >
-              Voir sur Booking.com
+              {t('cards.viewBooking')}
             </button>
           )}
         </div>
       ) : (
-        <div className="card-empty"><Building2 size={30} color="var(--text-sec)" /><span>Réservation hôtel</span></div>
+        <div className="card-empty"><Building2 size={30} color="var(--text-sec)" /><span>{t('cards.hotelEmpty')}</span></div>
       )}
     </div>
   );
@@ -734,16 +621,17 @@ function HotelCard({ data, loading }) {
 // ─── PRACTICAL INFO CARD ───────────────────────────────────────────────────────
 
 function PracticalInfoCard({ data, loading }) {
+  const { t } = useTranslation();
   const info = data?.practicalInfo;
   const [expanded, setExpanded] = useState(null);
 
   const items = [
-    { key: 'visa', icon: '🛂', label: 'Visa', value: info?.visa },
-    { key: 'vaccines', icon: '💉', label: 'Vaccins', value: info?.vaccines },
-    { key: 'plug', icon: '🔌', label: 'Prise', value: info?.plug },
-    { key: 'currency', icon: '💱', label: 'Monnaie', value: info?.currency },
-    { key: 'timezone', icon: '🕐', label: 'Décalage', value: info?.timezone },
-    { key: 'safety', icon: '🛡️', label: 'Sécurité', value: info?.safety },
+    { key: 'visa', icon: '🛂', label: t('cards.visa'), value: info?.visa },
+    { key: 'vaccines', icon: '💉', label: t('cards.vaccines'), value: info?.vaccines },
+    { key: 'plug', icon: '🔌', label: t('cards.plug'), value: info?.plug },
+    { key: 'currency', icon: '💱', label: t('cards.currency'), value: info?.currency },
+    { key: 'timezone', icon: '🕐', label: t('cards.timezone'), value: info?.timezone },
+    { key: 'safety', icon: '🛡️', label: t('cards.safety'), value: info?.safety },
   ];
 
   const getSafetyColor = (level) => {
@@ -755,7 +643,7 @@ function PracticalInfoCard({ data, loading }) {
   if (loading) {
     return (
       <div className="bento-card practical-card fade-in" style={{ animationDelay: '240ms' }}>
-        <div className="card-label">Infos Pratiques</div>
+        <div className="card-label">{t('cards.practicalInfo')}</div>
         <div style={{ display: 'flex', gap: 12 }}>
           {[1, 2, 3].map(i => <Skeleton key={i} w="80px" h="60px" r="8px" />)}
         </div>
@@ -765,7 +653,7 @@ function PracticalInfoCard({ data, loading }) {
 
   return (
     <div className="bento-card practical-card fade-in" style={{ animationDelay: '240ms' }}>
-      <div className="card-label">Infos Pratiques</div>
+      <div className="card-label">{t('cards.practicalInfo')}</div>
       {info ? (
         <>
           <div className="practical-icons">
@@ -806,7 +694,7 @@ function PracticalInfoCard({ data, loading }) {
           )}
         </>
       ) : (
-        <div className="card-empty"><FileText size={30} color="var(--text-sec)" /><span>Infos pratiques</span></div>
+        <div className="card-empty"><FileText size={30} color="var(--text-sec)" /><span>{t('cards.practicalEmpty')}</span></div>
       )}
     </div>
   );
@@ -815,11 +703,12 @@ function PracticalInfoCard({ data, loading }) {
 // ─── ACTIVITIES CARD ──────────────────────────────────────────────────────────
 
 function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, customActivities, setCustomActivities, deletedIndices, setDeletedIndices, dayActivityOrder, setDayActivityOrder }) {
+  const { t } = useTranslation();
   const acts   = data?.activities || [];
   const days   = [...new Set(acts.map(a => a.day || 1))].sort((a, b) => a - b);
   const [activeDay, setActiveDay] = useState(1);
   const [fading, setFading]       = useState(false);
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activeFilter, setActiveFilter] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [regenerating, setRegenerating] = useState(null);
   const [addingDay, setAddingDay] = useState(null);
@@ -842,22 +731,14 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
   const handleRegenerate = async (act) => {
     setRegenerating(`${act.day}-${act.name}`);
     try {
-      const mistralKey = sessionStorage.getItem('mistral_key') || '';
-      if (!mistralKey) { alert('Clé Mistral non configurée'); return; }
-      const msg = `Génère UNE SEULE nouvelle activité (JSON) pour le jour ${act.day} au créneau "${act.time}", tag "${act.tag}", style similaire à: ${act.name}. Réponds UNIQUEMENT avec: { "emoji": "", "name": "", "time": "", "tag": "", "description": "", "duration": "", "price": "", "address": "" }`;
-      const res = await fetch(MISTRAL_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mistralKey}` },
-        body: JSON.stringify({
-          model: 'mistral-small-latest',
-          messages: [{ role: 'user', content: msg }],
-          temperature: 0.7,
-        }),
+      const userKey = sessionStorage.getItem('mistral_key') || null;
+      const newAct = await regenerateActivity({
+        day: act.day,
+        time: act.time,
+        tag: act.tag,
+        name: act.name,
+        userKey,
       });
-      const json = await res.json();
-      const raw = json.choices?.[0]?.message?.content || '{}';
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-      const newAct = JSON.parse(cleaned);
       newAct.day = act.day;
       setCustomActivities(p => [...p, newAct]);
       setDeletedIndices(new Set([...deletedIndices].filter(i => i !== acts.indexOf(act))));
@@ -936,25 +817,26 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e, idx) => {
+  const handleDragOver = (e, id) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    setDragOverIndex(idx);
+    setDragOverIndex(id);
   };
 
-  const handleDrop = (e, dropIdx) => {
+  const handleDrop = (e, dropId) => {
     e.preventDefault();
     if (!draggedId) return;
     const allItems = getAllActivityItemsForDay();
     const dragIdx = allItems.findIndex(item => item.id === draggedId);
-    if (dragIdx === -1 || dragIdx === dropIdx) {
+    const dropIdx = allItems.findIndex(item => item.id === dropId);
+    if (dragIdx === -1 || dropIdx === -1 || dragIdx === dropIdx) {
       setDraggedId(null);
       setDragOverIndex(null);
       return;
     }
     const newOrder = allItems.map(item => item.id);
     const [dragged] = newOrder.splice(dragIdx, 1);
-    newOrder.splice(dropIdx > dragIdx ? dropIdx - 1 : dropIdx, 0, dragged);
+    newOrder.splice(dropIdx, 0, dragged);
     setDayActivityOrder(p => ({ ...p, [activeDay]: newOrder }));
     setDraggedId(null);
     setDragOverIndex(null);
@@ -965,23 +847,25 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
     setDragOverIndex(null);
   };
 
-  const allActivityItems = getAllActivityItemsForDay();
-  const filtered = allActivityItems
-    .map(item => item.act)
-    .filter((a, idx) => !deletedIndices.has(idx) && (a.day || 1) === activeDay)
-    .filter(a => {
-      if (activeFilter === 'All') return true;
-      const tagMap = { culture: 'Culture', food: 'Food', nature: 'Nature', divertissement: 'Divertissement' };
-      return tagMap[a.tag] === activeFilter;
-    });
+  const TAG_FILTER_OPTIONS = [
+    { value: 'all',           label: t('filters.all') },
+    { value: 'culture',       label: t('filters.culture') },
+    { value: 'food',          label: t('filters.food') },
+    { value: 'nature',        label: t('filters.nature') },
+    { value: 'divertissement', label: t('filters.entertainment') },
+  ];
 
-  const tags = ['All', 'Culture', 'Food', 'Nature', 'Divertissement'];
+  const allActivityItems = getAllActivityItemsForDay();
+  const filteredItems = allActivityItems
+    .filter(item => (item.act.day || 1) === activeDay)
+    .filter(item => activeFilter === 'all' || item.act.tag === activeFilter);
+  const filtered = filteredItems.map(item => item.act);
   const deletedActs = acts.filter((a, idx) => deletedIndices.has(idx) && (a.day || 1) === activeDay);
 
   return (
     <>
       <div className="bento-card acts-card fade-in" style={{ animationDelay: '240ms' }}>
-        <div className="card-label">Activités</div>
+        <div className="card-label">{t('cards.activities')}</div>
         {!loading && days.length > 1 && (
           <div className="day-tabs">
             {days.map(d => (
@@ -993,13 +877,13 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
         )}
         {!loading && acts.length > 0 && (
           <div className="act-filters">
-            {tags.map(tag => (
+            {TAG_FILTER_OPTIONS.map(({ value, label }) => (
               <button
-                key={tag}
-                className={`act-filter-pill ${tag === activeFilter ? 'active' : ''}`}
-                onClick={() => setActiveFilter(tag)}
+                key={value}
+                className={`act-filter-pill ${value === activeFilter ? 'active' : ''}`}
+                onClick={() => setActiveFilter(value)}
               >
-                {tag}
+                {label}
               </button>
             ))}
           </div>
@@ -1018,27 +902,28 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
           </div>
         ) : acts.length > 0 ? (
           <div className={`acts-list ${fading ? 'fading' : ''}`}>
-            {filtered.map((act, i) => {
+            {filteredItems.map((item, i) => {
+              const act    = item.act;
+              const id     = item.id;
+              const actType = { type: item.type, index: item.index };
               const tagKey = (act.tag || '').toLowerCase();
               const ts     = TAG_STYLES[tagKey] || TAG_STYLES.culture;
               const actKey = `${act.day}-${act.name}`;
               const rating = ratings[actKey] || 0;
-              const actType = getActivityType(act);
-              const id = actType ? makeActivityId(actType.type, actType.index) : null;
               const isBeingDragged = draggedId === id;
               return (
                 <div
                   key={id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, id)}
-                  onDragOver={(e) => handleDragOver(e, i)}
-                  onDrop={(e) => handleDrop(e, i)}
+                  onDragOver={(e) => handleDragOver(e, id)}
+                  onDrop={(e) => handleDrop(e, id)}
                   onDragEnd={handleDragEnd}
                   className="act-item-wrap"
                   style={{
                     animationDelay: `${i * 60}ms`,
                     opacity: isBeingDragged ? 0.5 : 1,
-                    borderTop: dragOverIndex === i ? '2px dashed var(--accent)' : 'none',
+                    borderTop: dragOverIndex === id ? '2px dashed var(--accent)' : 'none',
                     transition: 'all 0.2s ease'
                   }}
                 >
@@ -1066,7 +951,7 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
                           </button>
                         ))}
                       </div>
-                      <button className="act-maps-btn" onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ', ' + data?.destination?.city)}`, '_blank'); }} title="Voir sur Google Maps"><MapPin size={14} /></button>
+                      <button className="act-maps-btn" onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ', ' + data?.destination?.city)}`, '_blank'); }} title={t('cards.viewMaps')}><MapPin size={14} /></button>
                     </div>
                     <button
                       className="act-delete"
@@ -1080,7 +965,7 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
                           setDayActivityOrder(newOrder);
                         }
                       }}
-                      title="Supprimer"
+                      title={t('sidebar.delete')}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -1090,13 +975,13 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
               );
             })}
             {deletedActs.map((act, i) => (
-              <div key={`regen-${i}`} className="act-regenerate fade-in" style={{ animationDelay: `${filtered.length * 60 + i * 60}ms` }}>
+              <div key={`regen-${i}`} className="act-regenerate fade-in" style={{ animationDelay: `${filteredItems.length * 60 + i * 60}ms` }}>
                 {regenerating === `${act.day}-${act.name}` ? (
                   <Loader2 size={16} className="spin" />
                 ) : (
                   <button onClick={() => handleRegenerate(act)} className="regen-btn">
                     <RotateCcw size={14} />
-                    Regénérer
+                    {t('cards.regenerate')}
                   </button>
                 )}
               </div>
@@ -1105,14 +990,14 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
               <div className="act-form fade-in">
                 <input
                   type="text"
-                  placeholder="Nom de l'activité"
+                  placeholder={t('cards.activityName')}
                   value={formData.name}
                   onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
                   className="form-input"
                 />
                 <input
                   type="text"
-                  placeholder="Horaire (ex: 14:00)"
+                  placeholder={t('cards.activityTime')}
                   value={formData.time}
                   onChange={e => setFormData(p => ({ ...p, time: e.target.value }))}
                   className="form-input"
@@ -1127,8 +1012,8 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
                   <option value="nature">Nature</option>
                 </select>
                 <div className="form-buttons">
-                  <button onClick={handleAddActivity} className="btn-primary">Ajouter</button>
-                  <button onClick={() => setAddingDay(null)} className="btn-secondary">Annuler</button>
+                  <button onClick={handleAddActivity} className="btn-primary">{t('cards.add')}</button>
+                  <button onClick={() => setAddingDay(null)} className="btn-secondary">{t('cards.cancel')}</button>
                 </div>
               </div>
             ) : (
@@ -1138,7 +1023,7 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
             )}
           </div>
         ) : (
-          <div className="card-empty"><MapPin size={30} color="var(--text-sec)" /><span>Activités planifiées</span></div>
+          <div className="card-empty"><MapPin size={30} color="var(--text-sec)" /><span>{t('cards.activitiesEmpty')}</span></div>
         )}
       </div>
       {selectedActivity && (
@@ -1147,7 +1032,7 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
             <button className="act-modal-close" onClick={() => setSelectedActivity(null)}>
               <X size={18} />
             </button>
-            <button className="modal-maps-btn" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedActivity.name + ', ' + data?.destination?.city)}`, '_blank')} title="Voir sur Google Maps">
+            <button className="modal-maps-btn" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedActivity.name + ', ' + data?.destination?.city)}`, '_blank')} title={t('cards.viewMaps')}>
               <MapPin size={16} />
             </button>
             <div className="modal-emoji">{selectedActivity.emoji}</div>
@@ -1166,37 +1051,37 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
             <div className="modal-content">
               {selectedActivity.description && (
                 <div className="modal-section">
-                  <div className="modal-section-title">Description</div>
+                  <div className="modal-section-title">{t('modal.description')}</div>
                   <p>{selectedActivity.description}</p>
                 </div>
               )}
               {selectedActivity.duration && (
                 <div className="modal-section">
-                  <div className="modal-section-title">Durée</div>
+                  <div className="modal-section-title">{t('modal.duration')}</div>
                   <p>{selectedActivity.duration}</p>
                 </div>
               )}
               {selectedActivity.price && (
                 <div className="modal-section">
-                  <div className="modal-section-title">Prix estimé</div>
+                  <div className="modal-section-title">{t('modal.estimatedPrice')}</div>
                   <p>{selectedActivity.price}</p>
                 </div>
               )}
               {selectedActivity.address && (
                 <div className="modal-section">
-                  <div className="modal-section-title">Adresse</div>
+                  <div className="modal-section-title">{t('modal.address')}</div>
                   <p>{selectedActivity.address}</p>
                 </div>
               )}
               {selectedActivity.time && (
                 <div className="modal-section">
-                  <div className="modal-section-title">Horaire</div>
+                  <div className="modal-section-title">{t('modal.schedule')}</div>
                   <p>{selectedActivity.time}</p>
                 </div>
               )}
               {selectedActivity.tag && (
                 <div className="modal-section">
-                  <div className="modal-section-title">Catégorie</div>
+                  <div className="modal-section-title">{t('modal.category')}</div>
                   <span className="act-tag" style={{ background: TAG_STYLES[selectedActivity.tag]?.bg, color: TAG_STYLES[selectedActivity.tag]?.color }}>
                     {selectedActivity.tag}
                   </span>
@@ -1212,7 +1097,8 @@ function ActivitiesCard({ data, loading, onDayClick, ratings, setRatings, custom
 
 // ─── BUDGET CARD ──────────────────────────────────────────────────────────────
 
-function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxBudget = 0, travelers = 'Solo', actualSpending = {}, setActualSpending = () => {} }) {
+function BudgetCard({ data, loading, highlightedDay = null, isOver = false, travelers = 'Solo', actualSpending = {}, setActualSpending = () => {} }) {
+  const { t } = useTranslation();
   const [currency, setCurrency] = useState('EUR');
   const [rates,    setRates]    = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -1239,10 +1125,11 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
   };
 
   const handleExportBudgetCSV = () => {
-    const rows = [['Catégorie', 'Estimé (€)', 'Réel (€)']];
+    const budgetLabels = { housing: t('budgetLabels.housing'), food: t('budgetLabels.food'), transport: t('budgetLabels.transport'), activities: t('budgetLabels.activities'), other: t('budgetLabels.other') };
+    const rows = [[t('modal.category'), `${t('cards.estimated')} (€)`, `${t('cards.actual')} (€)`]];
     Object.entries(summary).forEach(([k, v]) => {
       const actual = actualSpending[k] || 0;
-      rows.push([BUDGET_LABELS[k], v.toString(), actual.toString()]);
+      rows.push([budgetLabels[k], v.toString(), actual.toString()]);
     });
     rows.push(['TOTAL', bud.total.toString(), Object.values(actualSpending).reduce((a, b) => a + b, 0).toString()]);
     const csv = rows.map(r => r.join(',')).join('\n');
@@ -1258,11 +1145,11 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
   return (
     <div className={`bento-card fade-in ${isOver ? 'budget-over' : ''}`} style={{ animationDelay: '300ms' }}>
       <div className="card-label-row">
-        <div className="card-label">Budget {isOver && <span className="budget-badge">⚠️ Dépassement</span>}</div>
+        <div className="card-label">{t('cards.budget')} {isOver && <span className="budget-badge">⚠️ {t('cards.budgetOver')}</span>}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {bud?.total && (
             <>
-              <button className="icon-btn" title="Exporter CSV" onClick={handleExportBudgetCSV} style={{ fontSize: '12px', padding: '4px 8px' }}>📥 CSV</button>
+              <button className="icon-btn" title={t('cards.exportCSV')} onClick={handleExportBudgetCSV} style={{ fontSize: '12px', padding: '4px 8px' }}>📥 CSV</button>
               <select className="currency-select" value={currency} onChange={handleCurrencyChange}>
                 {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -1284,9 +1171,9 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
               <DonutChart summary={summary} />
               <div className="budget-center">
                 <div className="budget-spent">{conv(totalSpent)}{sym}</div>
-                <div className="budget-of">estimé</div>
-                <div style={{fontSize: '10px', color: 'var(--text-sec)', marginTop: '4px'}}>Budget max: {conv(bud.total)}{sym}</div>
-                {nbTravelers > 1 && <div style={{fontSize: '10px', color: 'var(--text-sec)', marginTop: '2px'}}>{conv(perPersonBudget)}{sym}/pers</div>}
+                <div className="budget-of">{t('cards.estimated')}</div>
+                <div style={{fontSize: '10px', color: 'var(--text-sec)', marginTop: '4px'}}>{t('cards.budgetMax')} {conv(bud.total)}{sym}</div>
+                {nbTravelers > 1 && <div style={{fontSize: '10px', color: 'var(--text-sec)', marginTop: '2px'}}>{conv(perPersonBudget)}{sym}{t('cards.perPerson')}</div>}
               </div>
             </div>
             <div className="budget-legend">
@@ -1305,7 +1192,7 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
                     }
                   }}>
                     <div className="legend-dot" style={{ background: BUDGET_COLORS[k] }} />
-                    <span className="legend-lbl">{BUDGET_LABELS[k]}</span>
+                    <span className="legend-lbl">{t(`budgetLabels.${k}`)}</span>
                     <span className="legend-val">{conv(v)}{sym}</span>
                     {isEditing ? (
                       <input
@@ -1320,7 +1207,7 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
                         style={{ marginLeft: '8px', padding: '4px 6px', fontSize: '12px', width: '70px' }}
                       />
                     ) : (
-                      actual > 0 && <span className="legend-actual"> | {conv(actual)}{sym} réel</span>
+                      actual > 0 && <span className="legend-actual"> | {conv(actual)}{sym} {t('cards.actual')}</span>
                     )}
                   </div>
                 );
@@ -1332,17 +1219,17 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
           </div>
           {bud?.perDay && bud.perDay.length > 0 && (
             <div className="budget-daily-wrap">
-              <div className="daily-header">Dépenses par jour</div>
+              <div className="daily-header">{t('cards.dailyExpenses')}</div>
               <div className="daily-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Jour</th>
-                      <th>Logement</th>
-                      <th>Nourriture</th>
-                      <th>Transport</th>
-                      <th>Activités</th>
-                      <th>Total</th>
+                      <th>{t('cards.day')}</th>
+                      <th>{t('budgetLabels.housing')}</th>
+                      <th>{t('budgetLabels.food')}</th>
+                      <th>{t('budgetLabels.transport')}</th>
+                      <th>{t('budgetLabels.activities')}</th>
+                      <th>{t('cards.total')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1367,7 +1254,7 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
           )}
         </>
       ) : (
-        <div className="card-empty"><Wallet size={30} color="var(--text-sec)" /><span>Suivi budget</span></div>
+        <div className="card-empty"><Wallet size={30} color="var(--text-sec)" /><span>{t('cards.budgetEmpty')}</span></div>
       )}
     </div>
   );
@@ -1376,6 +1263,7 @@ function BudgetCard({ data, loading, highlightedDay = null, isOver = false, maxB
 // ─── PACKING LIST CARD ────────────────────────────────────────────────────────────
 
 function PackingListCard({ data, loading, checked, onToggle, customPackingItems = {}, setCustomPackingItems = () => {} }) {
+  const { t } = useTranslation();
   const packingList = data?.packingList || {};
   const [expanded, setExpanded] = useState({ essentials: true, clothes: true, gear: true, health: true });
   const [addingCategory, setAddingCategory] = useState(null);
@@ -1388,10 +1276,10 @@ function PackingListCard({ data, loading, checked, onToggle, customPackingItems 
   const totalCount = allItems.length;
 
   const categories = [
-    { key: 'essentials', label: '✋ Essentiels', icon: '🛂' },
-    { key: 'clothes', label: '👕 Vêtements', icon: '👔' },
-    { key: 'gear', label: '🎒 Équipement', icon: '⚙️' },
-    { key: 'health', label: '💊 Santé', icon: '🏥' },
+    { key: 'essentials', label: `✋ ${t('cards.essentials')}`, icon: '🛂' },
+    { key: 'clothes', label: `👕 ${t('cards.clothes')}`, icon: '👔' },
+    { key: 'gear', label: `🎒 ${t('cards.gear')}`, icon: '⚙️' },
+    { key: 'health', label: `💊 ${t('cards.health')}`, icon: '🏥' },
   ];
 
   const toggleCategory = (key) => {
@@ -1400,14 +1288,14 @@ function PackingListCard({ data, loading, checked, onToggle, customPackingItems 
 
   return (
     <div className="bento-card fade-in" style={{ animationDelay: '360ms' }}>
-      <div className="card-label"><CheckSquare2 size={13} style={{ marginRight: 5 }} />Packing List</div>
+      <div className="card-label"><CheckSquare2 size={13} style={{ marginRight: 5 }} />{t('cards.packingList')}</div>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {[1,2,3,4,5].map(i => <Skeleton key={i} h="18px" w={`${50 + i * 8}%`} />)}
         </div>
       ) : totalCount > 0 ? (
         <>
-          <div className="packing-counter">{packedCount}/{totalCount} items prêts</div>
+          <div className="packing-counter">{t('cards.itemsReady', { done: packedCount, total: totalCount })}</div>
           <div className="packing-categories">
             {categories.map(({ key, label, icon }) => {
               const baseItems = packingList[key] || [];
@@ -1452,13 +1340,13 @@ function PackingListCard({ data, loading, checked, onToggle, customPackingItems 
                             onKeyDown={(e) => { if (e.key === 'Enter') handleAddItem(); }}
                             onBlur={handleAddItem}
                             autoFocus
-                            placeholder="Nouvel item..."
+                            placeholder={t('cards.newItem')}
                             style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid var(--accent)', borderRadius: '4px' }}
                           />
                         </div>
                       ) : (
                         <button className="check-item" onClick={() => setAddingCategory(key)} style={{ color: 'var(--accent)', justifyContent: 'center' }}>
-                          <Plus size={14} /> Ajouter
+                          <Plus size={14} /> {t('cards.add')}
                         </button>
                       )}
                     </div>
@@ -1469,7 +1357,7 @@ function PackingListCard({ data, loading, checked, onToggle, customPackingItems 
           </div>
         </>
       ) : (
-        <div className="card-empty"><CheckSquare2 size={30} color="var(--text-sec)" /><span>Packing list</span></div>
+        <div className="card-empty"><CheckSquare2 size={30} color="var(--text-sec)" /><span>{t('cards.packingEmpty')}</span></div>
       )}
     </div>
   );
@@ -1478,12 +1366,13 @@ function PackingListCard({ data, loading, checked, onToggle, customPackingItems 
 // ─── NOTES CARD ───────────────────────────────────────────────────────────────
 
 function NotesCard({ data, loading, onChange }) {
+  const { t } = useTranslation();
   const [val, setVal] = useState('');
   useEffect(() => { setVal(data?.notes || ''); }, [data?.notes]);
 
   return (
     <div className="bento-card fade-in" style={{ animationDelay: '420ms' }}>
-      <div className="card-label"><FileText size={13} style={{ marginRight: 5 }} />Notes</div>
+      <div className="card-label"><FileText size={13} style={{ marginRight: 5 }} />{t('cards.notes')}</div>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1,2,3].map(i => <Skeleton key={i} h="14px" w={`${80 - i * 15}%`} />)}
@@ -1493,7 +1382,7 @@ function NotesCard({ data, loading, onChange }) {
           className="notes-area"
           value={val}
           onChange={e => { setVal(e.target.value); onChange(e.target.value); }}
-          placeholder="Vos notes de voyage…"
+          placeholder={t('cards.notesPlaceholder')}
         />
       )}
     </div>
@@ -1503,6 +1392,7 @@ function NotesCard({ data, loading, onChange }) {
 // ─── MAP CARD ───────────────────────────────────────────────────────────────────
 
 function MapCard({ data, dark, allStepsData = [] }) {
+  const { t, i18n } = useTranslation();
   const mapDiv = useRef(null);
   const mapRef = useRef(null);
 
@@ -1557,7 +1447,7 @@ function MapCard({ data, dark, allStepsData = [] }) {
           if (!stepData?.hotel?.lat || !stepData?.hotel?.lng) return;
           const icon = L.divIcon({ className: '', html: `<div class="map-marker hotel-marker" style="font-size:11px;font-weight:700">${si+1}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
           L.marker([stepData.hotel.lat, stepData.hotel.lng], { icon }).addTo(map)
-            .bindPopup(`<b>Étape ${si+1}: ${stepData.destination?.city}</b><br>${stepData.hotel.name}`);
+            .bindPopup(`<b>${t('timeline.step', { n: si+1 })}: ${stepData.destination?.city}</b><br>${stepData.hotel.name}`);
           bounds.push([stepData.hotel.lat, stepData.hotel.lng]);
         });
       }
@@ -1566,13 +1456,13 @@ function MapCard({ data, dark, allStepsData = [] }) {
     if (bounds.length > 0) map.fitBounds(bounds, { padding: [40, 40] });
     else map.setView([20, 0], 2);
     setTimeout(() => map.invalidateSize(), 100);
-  }, [data, dark, allStepsData]);
+  }, [data, dark, allStepsData, t]);
 
   useEffect(() => () => { mapRef.current?.remove(); mapRef.current = null; }, []);
 
   return (
     <div className="bento-card map-card fade-in" style={{ animationDelay: '480ms' }}>
-      <div className="card-label"><MapPin size={13} style={{ marginRight: 5 }} />Carte</div>
+      <div className="card-label"><MapPin size={13} style={{ marginRight: 5 }} />{t('cards.map')}</div>
       <div ref={mapDiv} className="map-container" />
     </div>
   );
@@ -1581,10 +1471,11 @@ function MapCard({ data, dark, allStepsData = [] }) {
 // ─── SUGGESTIONS BAR ────────────────────────────────────────────────────────────
 
 function SuggestionsBar({ suggestions, onSelect }) {
+  const { t } = useTranslation();
   if (!suggestions.length) return null;
   return (
     <div className="suggestions-bar">
-      <span className="suggestions-label"><Sparkles size={12} />Destinations similaires</span>
+      <span className="suggestions-label"><Sparkles size={12} />{t('suggestions.label')}</span>
       <div className="suggestions-cards">
         {suggestions.map((s, i) => (
           <button key={i} className="suggestion-card" onClick={() => onSelect(s.city)} style={{ animationDelay: `${i * 80}ms` }}>
@@ -1603,37 +1494,53 @@ function SuggestionsBar({ suggestions, onSelect }) {
 // ─── PREFERENCES PANEL ────────────────────────────────────────────────────────
 
 function PreferencesPanel({ travelers, setTravelers, style, setStyle, pace, setPace, maxBudget, setMaxBudget }) {
+  const { t } = useTranslation();
+  const travelerOptions = [
+    { value: 'Solo', label: t('prefs.solo') },
+    { value: 'Couple', label: t('prefs.couple') },
+    { value: 'Famille', label: t('prefs.family') },
+    { value: 'Groupe', label: t('prefs.group') },
+  ];
+  const styleOptions = [
+    { value: 'Backpacker', label: t('prefs.backpacker') },
+    { value: 'Confort', label: t('prefs.comfort') },
+    { value: 'Luxe', label: t('prefs.luxury') },
+  ];
+  const paceOptions = [
+    { value: 'Chargé', label: t('prefs.busy') },
+    { value: 'Tranquille', label: t('prefs.relaxed') },
+  ];
   return (
     <div className="preferences-panel">
       <div className="pref-row">
-        <label className="pref-label">Voyageurs</label>
+        <label className="pref-label">{t('prefs.travelers')}</label>
         <div className="pref-pills">
-          {['Solo', 'Couple', 'Famille', 'Groupe'].map(t => (
-            <button key={t} className={`pref-pill ${travelers === t ? 'active' : ''}`} onClick={() => setTravelers(t)}>{t}</button>
+          {travelerOptions.map(o => (
+            <button key={o.value} className={`pref-pill ${travelers === o.value ? 'active' : ''}`} onClick={() => setTravelers(o.value)}>{o.label}</button>
           ))}
         </div>
       </div>
 
       <div className="pref-row">
-        <label className="pref-label">Style</label>
+        <label className="pref-label">{t('prefs.style')}</label>
         <div className="pref-pills">
-          {['Backpacker', 'Confort', 'Luxe'].map(s => (
-            <button key={s} className={`pref-pill ${style === s ? 'active' : ''}`} onClick={() => setStyle(s)}>{s}</button>
+          {styleOptions.map(o => (
+            <button key={o.value} className={`pref-pill ${style === o.value ? 'active' : ''}`} onClick={() => setStyle(o.value)}>{o.label}</button>
           ))}
         </div>
       </div>
 
       <div className="pref-row">
-        <label className="pref-label">Rythme</label>
+        <label className="pref-label">{t('prefs.pace')}</label>
         <div className="pref-pills">
-          {['Chargé', 'Tranquille'].map(p => (
-            <button key={p} className={`pref-pill ${pace === p ? 'active' : ''}`} onClick={() => setPace(p)}>{p}</button>
+          {paceOptions.map(o => (
+            <button key={o.value} className={`pref-pill ${pace === o.value ? 'active' : ''}`} onClick={() => setPace(o.value)}>{o.label}</button>
           ))}
         </div>
       </div>
 
       <div className="pref-row">
-        <label className="pref-label">Budget max: <span className="pref-value">{maxBudget}€</span></label>
+        <label className="pref-label">{t('prefs.budgetMax')} <span className="pref-value">{maxBudget}€</span></label>
         <input type="range" className="pref-slider" min="500" max="10000" step="100" value={maxBudget} onChange={e => setMaxBudget(Number(e.target.value))} />
       </div>
     </div>
@@ -1643,13 +1550,14 @@ function PreferencesPanel({ travelers, setTravelers, style, setStyle, pace, setP
 // ─── INSPIRATIONS SECTION ─────────────────────────────────────────────────────
 
 function InspirationCard({ onSelect }) {
+  const { t } = useTranslation();
   const inspirations = [
-    { emoji: '🎒', title: 'Backpack Asie du Sud-Est', duration: '3 sem', price: '1500€', destination: 'Bangkok', days: 21, travelers: 'Solo', style: 'Backpacker', pace: 'Chargé' },
-    { emoji: '🚗', title: 'Roadtrip côte ouest USA', duration: '2 sem', price: '1800€', destination: 'Los Angeles', days: 14, travelers: 'Couple', style: 'Confort', pace: 'Chargé' },
-    { emoji: '🏙️', title: 'City Break Europe', duration: '5 jours', price: '800€', destination: 'Paris', days: 5, travelers: 'Couple', style: 'Confort', pace: 'Tranquille' },
-    { emoji: '💑', title: 'Lune de miel Maldives', duration: '10 jours', price: '3000€', destination: 'Maldives', days: 10, travelers: 'Couple', style: 'Luxe', pace: 'Tranquille' },
-    { emoji: '🏔️', title: 'Trek Amérique du Sud', duration: '3 sem', price: '2200€', destination: 'Cusco', days: 21, travelers: 'Solo', style: 'Backpacker', pace: 'Chargé' },
-    { emoji: '🌍', title: 'Tour Méditerranée', duration: '2 sem', price: '2500€', destination: 'Barcelona', days: 14, travelers: 'Groupe', style: 'Confort', pace: 'Chargé' },
+    { emoji: '🎒', title: t('inspirations.backpackAsia'), duration: t('inspirations.weeks', { n: 3 }), price: '1500€', destination: 'Bangkok', days: 21, travelers: 'Solo', style: 'Backpacker', pace: 'Chargé' },
+    { emoji: '🚗', title: t('inspirations.roadtripUSA'), duration: t('inspirations.weeks', { n: 2 }), price: '1800€', destination: 'Los Angeles', days: 14, travelers: 'Couple', style: 'Confort', pace: 'Chargé' },
+    { emoji: '🏙️', title: t('inspirations.cityBreak'), duration: t('inspirations.days', { n: 5 }), price: '800€', destination: 'Paris', days: 5, travelers: 'Couple', style: 'Confort', pace: 'Tranquille' },
+    { emoji: '💑', title: t('inspirations.honeymoon'), duration: t('inspirations.days', { n: 10 }), price: '3000€', destination: 'Maldives', days: 10, travelers: 'Couple', style: 'Luxe', pace: 'Tranquille' },
+    { emoji: '🏔️', title: t('inspirations.trekSA'), duration: t('inspirations.weeks', { n: 3 }), price: '2200€', destination: 'Cusco', days: 21, travelers: 'Solo', style: 'Backpacker', pace: 'Chargé' },
+    { emoji: '🌍', title: t('inspirations.tourMed'), duration: t('inspirations.weeks', { n: 2 }), price: '2500€', destination: 'Barcelona', days: 14, travelers: 'Groupe', style: 'Confort', pace: 'Chargé' },
   ];
 
   const gradients = [
@@ -1663,7 +1571,7 @@ function InspirationCard({ onSelect }) {
 
   return (
     <div className="inspirations-section">
-      <h3 className="inspirations-title">Inspirations</h3>
+      <h3 className="inspirations-title">{t('inspirations.title')}</h3>
       <div className="inspirations-carousel">
         {inspirations.map((insp, idx) => (
           <button key={idx} className="inspiration-card" style={{ background: gradients[idx] }} onClick={() => onSelect(insp)}>
@@ -1685,6 +1593,7 @@ function InspirationCard({ onSelect }) {
 // ─── SETTINGS MODAL ───────────────────────────────────────────────────────────
 
 function SettingsModal({ keys, onSave, onClose }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState({ ...keys });
   const set = (k, v) => setDraft(p => ({ ...p, [k]: v }));
 
@@ -1699,10 +1608,10 @@ function SettingsModal({ keys, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box settings-box" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <Settings size={16} /><span>Clés API</span>
+          <Settings size={16} /><span>{t('settings.title')}</span>
           <button className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
-        <p className="modal-hint">Clés stockées en mémoire de session. Les clés OpenWeather et Amadeus sont optionnelles (enrichissement en temps réel).</p>
+        <p className="modal-hint">{t('settings.hint')}</p>
 
         <div className="settings-fields">
           {fields.map(f => (
@@ -1724,9 +1633,9 @@ function SettingsModal({ keys, onSave, onClose }) {
         </div>
 
         <div className="modal-actions" style={{ marginTop: 20 }}>
-          <button className="modal-cancel" onClick={onClose}>Annuler</button>
+          <button className="modal-cancel" onClick={onClose}>{t('settings.cancel')}</button>
           <button className="modal-save" onClick={() => onSave(draft)}>
-            Enregistrer <ChevronRight size={14} />
+            {t('settings.save')} <ChevronRight size={14} />
           </button>
         </div>
       </div>
@@ -1739,6 +1648,7 @@ function SettingsModal({ keys, onSave, onClose }) {
 const TRANSPORT_EMOJI = { avion: '✈️', train: '🚂', bus: '🚌', bateau: '⛴️', voiture: '🚗' };
 
 function StepTimeline({ steps, activeIdx, onStepClick }) {
+  const { t } = useTranslation();
   return (
     <div className="step-timeline fade-in">
       {steps.map((step, i) => (
@@ -1748,7 +1658,7 @@ function StepTimeline({ steps, activeIdx, onStepClick }) {
             <div className="timeline-circle">
               {step.loading ? <Loader2 size={14} className="spin" /> : step.data ? '🏁' : '📍'}
             </div>
-            <div className="timeline-label">{step.data?.destination?.city || step.dest || `Étape ${i+1}`}</div>
+            <div className="timeline-label">{step.data?.destination?.city || step.dest || t('timeline.step', { n: i+1 })}</div>
           </button>
           {i < steps.length - 1 && (
             <div className="timeline-connector">
@@ -1769,10 +1679,11 @@ function StepTimeline({ steps, activeIdx, onStepClick }) {
 }
 
 function ExtraStepRow({ index, step, onChange, onRemove, disabled }) {
+  const { t } = useTranslation();
   return (
     <div className="extra-step-row">
-      <span className="step-label-pill">Étape {index + 2}</span>
-      <input className="search-input" placeholder="Destination" value={step.dest}
+      <span className="step-label-pill">{t('timeline.step', { n: index + 2 })}</span>
+      <input className="search-input" placeholder={t('search.destination')} value={step.dest}
         onChange={e => onChange('dest', e.target.value)} disabled={disabled} />
       <div className="search-divider" />
       <input type="date" className="date-input" value={step.dateDepart}
@@ -1786,6 +1697,7 @@ function ExtraStepRow({ index, step, onChange, onRemove, disabled }) {
 }
 
 function ChatPanel({ messages, loading, onSendMessage, onClose, open }) {
+  const { t } = useTranslation();
   const [input, setInput] = React.useState('');
   const messagesEnd = React.useRef(null);
 
@@ -1803,7 +1715,7 @@ function ChatPanel({ messages, loading, onSendMessage, onClose, open }) {
   return (
     <div className={`chat-panel ${open ? 'open' : ''}`}>
       <div className="chat-header">
-        <div className="chat-title">Assistant IA</div>
+        <div className="chat-title">{t('chat.title')}</div>
         <button className="chat-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="chat-messages">
@@ -1818,7 +1730,7 @@ function ChatPanel({ messages, loading, onSendMessage, onClose, open }) {
       <div className="chat-input">
         <input
           type="text"
-          placeholder="Posez une question..."
+          placeholder={t('chat.placeholder')}
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !loading && handleSend()}
@@ -1831,7 +1743,8 @@ function ChatPanel({ messages, loading, onSendMessage, onClose, open }) {
 }
 
 function TimelineView({ data, destination }) {
-  if (!data?.activities?.length) return <div style={{padding: '20px', textAlign: 'center', color: 'var(--text-sec)'}}>Aucune activité</div>;
+  const { t } = useTranslation();
+  if (!data?.activities?.length) return <div style={{padding: '20px', textAlign: 'center', color: 'var(--text-sec)'}}>{t('timeline.noActivities')}</div>;
 
   const days = [...new Set(data.activities.map(a => a.day || 1))].sort((a, b) => a - b);
 
@@ -1840,7 +1753,7 @@ function TimelineView({ data, destination }) {
       <div className="timeline-title">{destination}</div>
       {days.map(day => (
         <div key={day} className="timeline-day">
-          <div className="timeline-day-header">Jour {day}</div>
+          <div className="timeline-day-header">{t('timeline.day', { n: day })}</div>
           {data.activities.filter(a => (a.day || 1) === day).map((act, i) => (
             <div key={`${day}-${i}`} className="timeline-activity">
               <div className="timeline-activity-time">{act.time}</div>
@@ -1865,6 +1778,7 @@ function TimelineView({ data, destination }) {
 function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest,
   compareDateDepart, setCompareDateDepart, compareDateRetour, setCompareDateRetour,
   onPlan, onChoose, onClose }) {
+  const { t } = useTranslation();
   const cmp = (a, b, lowerBetter = false) => {
     if (a == null || b == null || a === b) return '';
     return (lowerBetter ? a < b : a > b) ? 'better' : 'worse';
@@ -1875,24 +1789,24 @@ function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest
   const safeA = dataA?.practicalInfo?.safetyLevel, safeB = dataB?.practicalInfo?.safetyLevel;
 
   const statsA = [
-    { label: 'Météo',        value: dataA?.weather?.temp ? `${dataA.weather.temp} — ${dataA.weather.condition}` : '—', cls: '' },
-    { label: 'Hôtel/nuit',   value: priceA != null ? `${priceA} €` : '—', cls: cmp(priceA, priceB, true) },
-    { label: 'Budget total', value: budgetA != null ? `${budgetA} €` : '—', cls: cmp(budgetA, budgetB, true) },
-    { label: 'Activités',    value: actA ? `${actA} activités` : '—', cls: cmp(actA, actB) },
-    { label: 'Sécurité',     value: safeA != null ? `${safeA}/5` : '—', cls: cmp(safeA, safeB) },
+    { label: t('compare.weather'),      value: dataA?.weather?.temp ? `${dataA.weather.temp} — ${dataA.weather.condition}` : '—', cls: '' },
+    { label: t('compare.hotelPerNight'), value: priceA != null ? `${priceA} €` : '—', cls: cmp(priceA, priceB, true) },
+    { label: t('compare.totalBudget'),  value: budgetA != null ? `${budgetA} €` : '—', cls: cmp(budgetA, budgetB, true) },
+    { label: t('compare.activities'),   value: actA ? t('compare.activitiesCount', { count: actA }) : '—', cls: cmp(actA, actB) },
+    { label: t('compare.safety'),       value: safeA != null ? `${safeA}/5` : '—', cls: cmp(safeA, safeB) },
   ];
   const statsB = [
-    { label: 'Météo',        value: dataB?.weather?.temp ? `${dataB.weather.temp} — ${dataB.weather.condition}` : '—', cls: '' },
-    { label: 'Hôtel/nuit',   value: priceB != null ? `${priceB} €` : '—', cls: cmp(priceB, priceA, true) },
-    { label: 'Budget total', value: budgetB != null ? `${budgetB} €` : '—', cls: cmp(budgetB, budgetA, true) },
-    { label: 'Activités',    value: actB ? `${actB} activités` : '—', cls: cmp(actB, actA) },
-    { label: 'Sécurité',     value: safeB != null ? `${safeB}/5` : '—', cls: cmp(safeB, safeA) },
+    { label: t('compare.weather'),      value: dataB?.weather?.temp ? `${dataB.weather.temp} — ${dataB.weather.condition}` : '—', cls: '' },
+    { label: t('compare.hotelPerNight'), value: priceB != null ? `${priceB} €` : '—', cls: cmp(priceB, priceA, true) },
+    { label: t('compare.totalBudget'),  value: budgetB != null ? `${budgetB} €` : '—', cls: cmp(budgetB, budgetA, true) },
+    { label: t('compare.activities'),   value: actB ? t('compare.activitiesCount', { count: actB }) : '—', cls: cmp(actB, actA) },
+    { label: t('compare.safety'),       value: safeB != null ? `${safeB}/5` : '—', cls: cmp(safeB, safeA) },
   ];
 
   return (
     <div className="compare-overlay">
       <div className="compare-header">
-        <span className="compare-title">Comparaison de destinations</span>
+        <span className="compare-title">{t('compare.title')}</span>
         <button className="icon-btn" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="compare-cols">
@@ -1906,19 +1820,19 @@ function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest
               </div>
             ))}
           </div>
-          <button className="btn-choose" onClick={() => onChoose('left')}>Choisir celle-ci</button>
+          <button className="btn-choose" onClick={() => onChoose('left')}>{t('compare.choose')}</button>
         </div>
         <div className="compare-divider" />
         <div className="compare-col">
           {!dataB && !compareLoading ? (
             <div className="compare-form">
-              <input className="search-input" placeholder="Destination" value={compareDest}
+              <input className="search-input" placeholder={t('search.destination')} value={compareDest}
                 onChange={e => setCompareDest(e.target.value)} />
               <input type="date" className="date-input" value={compareDateDepart}
                 onChange={e => setCompareDateDepart(e.target.value)} />
               <input type="date" className="date-input" value={compareDateRetour}
                 onChange={e => setCompareDateRetour(e.target.value)} />
-              <button className="btn-plan" onClick={onPlan} disabled={!compareDest.trim()}>Planifier</button>
+              <button className="btn-plan" onClick={onPlan} disabled={!compareDest.trim()}>{t('compare.plan')}</button>
             </div>
           ) : compareLoading ? (
             <div className="compare-loading"><Loader2 size={28} className="spin" /></div>
@@ -1933,7 +1847,7 @@ function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest
                   </div>
                 ))}
               </div>
-              <button className="btn-choose" onClick={() => onChoose('right')}>Choisir celle-ci</button>
+              <button className="btn-choose" onClick={() => onChoose('right')}>{t('compare.choose')}</button>
             </>
           )}
         </div>
@@ -1945,6 +1859,14 @@ function CompareView({ dataA, dataB, compareLoading, compareDest, setCompareDest
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
+  const toggleLang = () => {
+    const next = lang === 'fr' ? 'en' : 'fr';
+    i18n.changeLanguage(next);
+    localStorage.setItem('lang', next);
+    document.documentElement.lang = next;
+  };
   const [dark,        setDark]        = useState(() => localStorage.getItem('theme') === 'dark');
   const [dest,        setDest]        = useState('');
   const [depCity,     setDepCity]     = useState('Paris (CDG)');
@@ -2000,6 +1922,9 @@ export default function App() {
   const activeLoading = activeStepIdx === 0 ? loading : (stepsLoading[activeStepIdx - 1] ?? false);
   const multiMode     = extraSteps.length > 0;
 
+  // SEO: update <title>, <meta description>, OG tags when trip is generated
+  useDocumentTitle(activeData);
+
   // Compare mode state
   const [compareMode,       setCompareMode]       = useState(false);
   const [compareData,       setCompareData]       = useState(null);
@@ -2023,30 +1948,22 @@ export default function App() {
   // Compare mode
   const handleCompare = async () => {
     if (!compareDest.trim()) return;
-    if (!keys.mistral) { setShowModal(true); return; }
     setCompareLoading(true);
     setCompareData(null);
     try {
       const depAirport = getCityAirportCode(depCity);
-      const sysMsg = SYSTEM_PROMPT.replace('"from": "CDG"', `"from": "${depAirport}"`);
-      const res = await fetch(MISTRAL_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
-        body: JSON.stringify({
-          model: 'mistral-small-latest',
-          messages: [{ role: 'user', content: `${sysMsg}\n\n${buildUserMessage(compareDest, compareDateDepart, compareDateRetour, depCity, { travelers, style, pace, maxBudget })}` }],
-          temperature: 0.7,
-          response_format: { type: 'json_object' },
-        }),
+      const sysMsg = getSystemPrompt(lang).replace('"from": "CDG"', `"from": "${depAirport}"`);
+      const userMessage = buildUserMessage(compareDest, compareDateDepart, compareDateRetour, depCity, { travelers, style, pace, maxBudget }, null, lang);
+      const parsed = await generateTrip({
+        systemPrompt: sysMsg,
+        userMessage,
+        userKey: keys.mistral || null,
       });
-      const result = await res.json();
-      const raw = result.choices?.[0]?.message?.content || '';
-      const cleaned = raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/i,'').trim();
-      const parsed = JSON.parse(cleaned);
       parsed.preferences = { travelers, style, pace, maxBudget };
       setCompareData(parsed);
-    } catch {
-      showToast('Erreur lors de la comparaison');
+    } catch (e) {
+      const { message } = classifyAiError(e, !!keys.mistral, t);
+      showToast(message);
     } finally {
       setCompareLoading(false);
     }
@@ -2085,7 +2002,7 @@ export default function App() {
       setDest(shared.dest || '');
       setDateDepart(shared.dateDepart || '');
       setDateRetour(shared.dateRetour || '');
-      showToast('Voyage restauré à partir du lien partagé ✓');
+      showToast(t('toast.sharedRestored'));
       window.location.hash = '';
     }
   }, []);
@@ -2100,7 +2017,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeData?.budget?.total && activeData.budget.total > maxBudget) {
-      showToast(`⚠️ Budget dépassé: ${activeData.budget.total}€ > ${maxBudget}€`);
+      showToast(t('toast.budgetOver', { total: activeData.budget.total, max: maxBudget }));
     }
   }, [activeData?.budget?.total, maxBudget]);
 
@@ -2126,7 +2043,7 @@ export default function App() {
     ssSet('amadeus_id',     newKeys.amadeusId);
     ssSet('amadeus_secret', newKeys.amadeusSecret);
     setShowModal(false);
-    showToast('Clés enregistrées ✓');
+    showToast(t('toast.keysSaved'));
   };
 
   const handleToggle = (item) => setChecked(p => ({ ...p, [item]: !p[item] }));
@@ -2154,7 +2071,7 @@ export default function App() {
     const updated = [trip, ...savedTrips.filter(t => !(t.city === trip.city && t.dateDepart === trip.dateDepart))];
     setSavedTrips(updated);
     localStorage.setItem('saved_trips', JSON.stringify(updated));
-    showToast('Voyage sauvegardé ✓');
+    showToast(t('toast.tripSaved'));
   };
 
   const handleLoadTrip = (trip) => {
@@ -2190,37 +2107,35 @@ export default function App() {
   const enrichData = (parsed) => {
     // 1. OpenWeather
     if (keys.ow && parsed.destination?.city) {
-      console.log('[enrichData] Starting OpenWeather fetch for:', parsed.destination.city);
+
       setEnrichingWeather(true);
       fetchRealWeather(parsed.destination.city, keys.ow)
-        .then(w => { console.log('[enrichData] OpenWeather success:', w); setData(d => d ? { ...d, weather: w } : d); setWeatherIsLive(true); setEnrichingWeather(false); })
-        .catch((err) => { console.error('[enrichData] OpenWeather error:', err.message); showToast('Météo live indisponible — données IA conservées'); setEnrichingWeather(false); });
+        .then(w => { setData(d => d ? { ...d, weather: w } : d); setWeatherIsLive(true); setEnrichingWeather(false); })
+        .catch((err) => { console.error('[enrichData] OpenWeather error:', err.message); showToast(t('toast.weatherUnavailable')); setEnrichingWeather(false); });
     } else {
-      console.log('[enrichData] OpenWeather skipped:', { hasKey: !!keys.ow, hasCity: !!parsed.destination?.city });
     }
 
     // 2. Amadeus
     if (keys.amadeusId && keys.amadeusSecret && parsed.flight?.to && dateDepart) {
       const depAirport = getCityAirportCode(depCity);
       if (depAirport === 'CDG' && !CITY_AIRPORT_MAP[depCity.trim().toLowerCase()]) {
-        showToast(`Recherche de vol impossible pour ${depCity}`);
+        showToast(t('toast.flightSearchFailed', { city: depCity }));
       } else {
         setEnrichingFlight(true);
         getAmadeusToken(keys.amadeusId, keys.amadeusSecret)
           .then(token => fetchRealFlight(parsed.flight.from || depAirport, parsed.flight.to, dateDepart, token))
           .then(fl => { setData(d => d ? { ...d, flight: fl } : d); setFlightIsReal(true); setEnrichingFlight(false); })
-          .catch(() => { showToast('Vol réel indisponible — données IA conservées'); setEnrichingFlight(false); });
+          .catch(() => { showToast(t('toast.flightUnavailable')); setEnrichingFlight(false); });
       }
     }
   };
 
   // ── MAIN API CALL ──────────────────────────────────────────────────────────
   const handlePlan = async (destOverride) => {
-    console.log('[handlePlan] Start', { destOverride, dest, keysExists: !!keys.mistral });
+
     const d = String(destOverride || dest || '').trim();
-    if (!d)    { showToast('Veuillez entrer une destination'); return; }
-    if (!keys.mistral)   { setShowModal(true); return; }
-    if (dateDepart && dateRetour && dateRetour < dateDepart) { showToast('La date de retour doit être après le départ'); return; }
+    if (!d) { showToast(t('toast.enterDest')); return; }
+    if (dateDepart && dateRetour && dateRetour < dateDepart) { showToast(t('toast.dateError')); return; }
 
     setLoading(true);
     setData(null);
@@ -2230,35 +2145,16 @@ export default function App() {
     setChatMessages([]);
 
     try {
-      console.log('[handlePlan] Before fetch', { d });
       const depAirport = getCityAirportCode(depCity);
-      const systemMsg = SYSTEM_PROMPT.replace('"from": "CDG"', `"from": "${depAirport}"`);
-      const res = await fetch(MISTRAL_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
-        body: JSON.stringify({
-          model: 'mistral-small-latest',
-          messages: [{ role: 'user', content: `${systemMsg}\n\n${buildUserMessage(d, dateDepart, dateRetour, depCity, { travelers, style, pace, maxBudget })}` }],
-          temperature: 0.7,
-          response_format: { type: 'json_object' },
-        }),
+      const systemMsg = getSystemPrompt(lang).replace('"from": "CDG"', `"from": "${depAirport}"`);
+      const userMessage = buildUserMessage(d, dateDepart, dateRetour, depCity, { travelers, style, pace, maxBudget }, null, lang);
+
+      const parsed = await generateTrip({
+        systemPrompt: systemMsg,
+        userMessage,
+        userKey: keys.mistral || null,
       });
 
-      if (!res.ok) {
-        console.error('[handlePlan] HTTP error', { status: res.status });
-        const err = await res.json().catch(() => ({}));
-        if (res.status === 400 || res.status === 403) { showToast('Clé Mistral invalide.'); setShowModal(true); }
-        else { showToast(err.error?.message || `Erreur ${res.status}`); }
-        return;
-      }
-
-      console.log('[handlePlan] Response OK', { status: res.status });
-      const result  = await res.json();
-      const raw     = result.choices?.[0]?.message?.content || '';
-      console.log('[handlePlan] Parsed JSON raw length:', raw.length);
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-      const parsed  = JSON.parse(cleaned);
-      console.log('[handlePlan] Data set', { city: parsed.destination?.city });
       parsed.preferences = { travelers, style, pace, maxBudget };
       setData(parsed);
 
@@ -2267,7 +2163,7 @@ export default function App() {
 
       // Non-blocking suggestions (skip in multi-mode)
       if (!multiMode) {
-        fetchSuggestions(d, keys.mistral)
+        getSuggestions({ destination: d, userKey: keys.mistral || null })
           .then(s => setSuggestions(s))
           .catch(() => {});
       }
@@ -2284,27 +2180,21 @@ export default function App() {
           try {
             const stepContext = { stepN: i + 2, total: extraSteps.length + 1, prevCity };
             const stepDepCity = prevCity;
-            const depAirport = getCityAirportCode(stepDepCity);
-            const sysMsg = SYSTEM_PROMPT.replace('"from": "CDG"', `"from": "${depAirport}"`);
-            const stepRes = await fetch(MISTRAL_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
-              body: JSON.stringify({
-                model: 'mistral-small-latest',
-                messages: [{ role: 'user', content: `${sysMsg}\n\n${buildUserMessage(step.dest, step.dateDepart, step.dateRetour, stepDepCity, { travelers, style, pace, maxBudget }, stepContext)}` }],
-                temperature: 0.7,
-                response_format: { type: 'json_object' },
-              }),
+            const stepDepAirport = getCityAirportCode(stepDepCity);
+            const sysMsg = getSystemPrompt(lang).replace('"from": "CDG"', `"from": "${stepDepAirport}"`);
+            const stepUserMessage = buildUserMessage(step.dest, step.dateDepart, step.dateRetour, stepDepCity, { travelers, style, pace, maxBudget }, stepContext, lang);
+
+            const stepParsed = await generateTrip({
+              systemPrompt: sysMsg,
+              userMessage: stepUserMessage,
+              userKey: keys.mistral || null,
             });
-            const stepResult = await stepRes.json();
-            const stepRaw = stepResult.choices?.[0]?.message?.content || '';
-            const stepCleaned = stepRaw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-            const stepParsed = JSON.parse(stepCleaned);
             stepParsed.preferences = { travelers, style, pace, maxBudget };
             setStepsData(s => { const c = [...s]; c[i] = stepParsed; return c; });
             prevCity = stepParsed.destination?.city || step.dest;
-          } catch {
-            showToast(`Erreur pour l'étape ${i + 2}`);
+          } catch (err) {
+            const { message } = classifyAiError(err, !!keys.mistral, t);
+            showToast(t('toast.stepError', { n: i + 2, message }));
           } finally {
             setStepsLoading(s => { const c = [...s]; c[i] = false; return c; });
           }
@@ -2312,90 +2202,19 @@ export default function App() {
       }
 
     } catch (e) {
-      console.error('[handlePlan] Error caught:', e.message, e);
-      if (e instanceof SyntaxError) showToast('Erreur de parsing JSON — réessayez.');
-      else                          showToast(e.message || 'Une erreur est survenue.');
+      console.error('[handlePlan] Error caught:', e);
+      const { kind, message } = classifyAiError(e, !!keys.mistral, t);
+      showToast(message);
+      if (kind === 'invalid_key') setShowModal(true);
     } finally {
-      console.log('[handlePlan] Finally block');
       setLoading(false);
     }
   };
 
-  const handleExport = async () => {
-    if (!gridRef.current || !data) return;
-    try {
-      const canvas = await window.html2canvas(gridRef.current, { scale: 1.5, useCORS: true, logging: false });
-      const imgData = canvas.toDataURL('image/jpeg', 0.9);
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      pdf.setFontSize(15);
-      pdf.text(`Mon voyage à ${data.destination?.city || dest}`, 14, 14);
-      pdf.setFontSize(10);
-      pdf.text(new Date().toLocaleDateString('fr-FR'), 14, 21);
-      const ratio = canvas.width / canvas.height;
-      const iw = pw - 20;
-      const ih = Math.min(iw / ratio, ph - 30);
-      pdf.addImage(imgData, 'JPEG', 10, 26, iw, ih);
-      pdf.save(`voyage-${(data.destination?.city || dest).toLowerCase().replace(/\s+/g, '-')}.pdf`);
-    } catch {
-      showToast('Export PDF échoué');
-    }
-  };
-
-  const handleExportStructuredPDF = () => {
-    if (!data) return;
-    try {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      let y = 10;
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const addLine = (text, size = 10, bold = false) => {
-        if (y > pageHeight - 10) { pdf.addPage(); y = 10; }
-        pdf.setFontSize(size);
-        pdf.setFont(undefined, bold ? 'bold' : 'normal');
-        const lines = pdf.splitTextToSize(text, 190);
-        pdf.text(lines, 10, y);
-        y += size / 2.5 * lines.length + 2;
-      };
-
-      addLine(`Voyage à ${data.destination?.city}`, 16, true);
-      addLine(`${data.destination?.dates || 'Dates non spécifiées'}`, 10);
-      addLine(``, 5);
-
-      const days = [...new Set(data.activities?.map(a => a.day || 1) || [])].sort((a, b) => a - b);
-      days.forEach(day => {
-        addLine(`Jour ${day}`, 12, true);
-        data.activities
-          ?.filter(a => (a.day || 1) === day)
-          .forEach(act => {
-            addLine(`  ${act.emoji} ${act.time} - ${act.name} (${act.tag})`);
-          });
-        addLine(``, 5);
-      });
-
-      addLine(`Budget`, 12, true);
-      addLine(`Hôtel: ${data.hotel?.pricePerNight}€/nuit - Total estimé: ${data.budget?.total}€`);
-      addLine(``, 5);
-
-      if (data.packingList) {
-        addLine(`Packing List`, 12, true);
-        Object.entries(data.packingList).forEach(([cat, items]) => {
-          if (items?.length) addLine(`  ${cat}: ${items.join(', ')}`);
-        });
-      }
-
-      pdf.save(`voyage-${(data.destination?.city || dest).toLowerCase().replace(/\s+/g, '-')}-structured.pdf`);
-    } catch {
-      showToast('Export PDF structuré échoué');
-    }
-  };
-
   const handleExportIcal = () => {
-    if (!data) { showToast('Données manquantes'); return; }
+    if (!data) { showToast(t('toast.dataMissing')); return; }
     try {
-      if (!dateDepart || !dateRetour) throw new Error('Dates manquantes');
+      if (!dateDepart || !dateRetour) throw new Error(t('toast.datesMissing'));
 
       const formatDateForIcal = (dateStr) => {
         if (!dateStr) return '';
@@ -2411,7 +2230,7 @@ export default function App() {
 
       let ical = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Travel Planner//EN
+PRODID:-//Itinera//EN
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
 X-WR-CALNAME:Voyage à ${data.destination?.city || 'Destination'}
@@ -2463,7 +2282,7 @@ END:VEVENT
 UID:activity-${idx}-${Date.now()}@travelplanner
 DTSTAMP:${now}
 DTSTART:${actDateStr}T${h}${m}00Z
-DURATION:PT${(act.duration || '2h').replace('h', '')}H
+DURATION:PT${parseInt((act.duration || '2h'), 10) || 2}H
 SUMMARY:${act.emoji} ${act.name}
 DESCRIPTION:${act.tag || 'Activité'} - ${act.description || ''}
 LOCATION:${act.address || data.destination?.city}
@@ -2482,10 +2301,10 @@ END:VEVENT
       link.download = `voyage-${(data.destination?.city || 'voyage').toLowerCase().replace(/\s+/g, '-')}.ics`;
       link.click();
       URL.revokeObjectURL(link.href);
-      showToast('Calendrier exporté ✓');
+      showToast(t('toast.calendarExported'));
     } catch (err) {
       console.error(err);
-      showToast('Export iCal échoué');
+      showToast(t('toast.calendarFailed'));
     }
   };
 
@@ -2517,10 +2336,10 @@ END:VEVENT
       link.download = `voyage-${(data.destination?.city || dest).toLowerCase().replace(/\s+/g, '-')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      showToast('Image exportée ✓');
+      showToast(t('toast.imageExported'));
     } catch (err) {
       console.error(err);
-      showToast('Export image échoué');
+      showToast(t('toast.imageFailed'));
     }
   };
 
@@ -2532,58 +2351,38 @@ END:VEVENT
 
   const handleRegenerateTrip = () => {
     if (!data?.destination?.city) return;
-    showToast('Génération d\'une nouvelle version…');
+    showToast(t('toast.regenerating'));
     handlePlan(data.destination.city);
   };
 
   const handleSurpriseMe = async () => {
-    if (!keys.mistral) { setShowModal(true); return; }
     try {
-      const month = new Date().toLocaleDateString('fr-FR', { month: 'long' });
-      const msg = `Suggest ONE travel destination for a ${style} traveler with ${maxBudget}€ budget departing from ${depCity}. Respond ONLY with JSON: {"city": "", "country": ""}`;
-      const res = await fetch(MISTRAL_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
-        body: JSON.stringify({
-          model: 'mistral-small-latest',
-          messages: [{ role: 'user', content: msg }],
-          temperature: 0.9,
-        }),
-      });
-      const json = await res.json();
-      const raw = json.choices?.[0]?.message?.content || '{}';
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-      const { city } = JSON.parse(cleaned);
+      const city = await surpriseMeCity({ style, maxBudget, depCity, userKey: keys.mistral || null });
       if (city) { setDest(city); handlePlan(city); }
+      else showToast(t('toast.surpriseFailed'));
     } catch (e) {
-      showToast('Impossible de générer une destination surprise');
+      const { message, kind } = classifyAiError(e, !!keys.mistral, t);
+      showToast(message);
+      if (kind === 'invalid_key') setShowModal(true);
     }
   };
 
   const handleChatMessage = async (userMsg) => {
-    if (!userMsg.trim() || !keys.mistral) return;
+    if (!userMsg.trim()) return;
     setChatMessages(m => [...m, { role: 'user', content: userMsg }]);
     setChatLoading(true);
     try {
       const context = `Contexte du voyage: ${data?.destination?.city || 'N/A'}, ${data?.destination?.dates || 'N/A'}. Budget: ${data?.budget?.total || 'N/A'}€.`;
       const msgs = [...chatMessages, { role: 'user', content: `${context}\n\n${userMsg}` }].map(m => ({ role: m.role, content: m.content }));
-      const res = await fetch(MISTRAL_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keys.mistral}` },
-        body: JSON.stringify({
-          model: 'mistral-small-latest',
-          messages: [
-            { role: 'system', content: 'Tu es un assistant de voyage sympathique. Réponds en 2-3 phrases courtes, en langage naturel, sans JSON, sans markdown, sans listes.' },
-            ...msgs
-          ],
-          temperature: 0.7,
-        }),
+      const reply = await chatAi({
+        systemPrompt: t('chat.systemPrompt'),
+        messages: msgs,
+        userKey: keys.mistral || null,
       });
-      const json = await res.json();
-      const reply = json.choices?.[0]?.message?.content || 'Erreur lors de la réponse';
-      setChatMessages(m => [...m, { role: 'assistant', content: reply }]);
+      setChatMessages(m => [...m, { role: 'assistant', content: reply || 'Erreur lors de la réponse' }]);
     } catch (e) {
-      showToast('Erreur chat IA');
+      const { message } = classifyAiError(e, !!keys.mistral, t);
+      showToast(message);
     } finally {
       setChatLoading(false);
     }
@@ -2623,30 +2422,33 @@ END:VEVENT
         {/* ── HEADER ── */}
         <header className="header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="icon-btn" title="Mes voyages" onClick={() => setSidebarOpen(o => !o)}>
+            <button className="icon-btn" title={t('header.myTrips')} aria-label={t('header.myTrips')} onClick={() => setSidebarOpen(o => !o)}>
               <Menu size={16} />
             </button>
-            <h1 className="app-title">Voyage <span className="title-icon">✈️</span></h1>
+            <h1 className="app-title">{t('app.title')} <span className="title-icon">✈️</span></h1>
           </div>
           <div className="header-right">
             {data && (
               <>
-                <button className="icon-btn" title={viewMode === 'grid' ? 'Timeline' : 'Grille'} onClick={() => setViewMode(viewMode === 'grid' ? 'timeline' : 'grid')}>
+                <button className="icon-btn" title={viewMode === 'grid' ? t('header.timeline') : t('header.grid')} onClick={() => setViewMode(viewMode === 'grid' ? 'timeline' : 'grid')}>
                   {viewMode === 'grid' ? <LayoutList size={16} /> : <LayoutGrid size={16} />}
                 </button>
-                <button className="icon-btn" title="Chat IA" onClick={() => setChatOpen(o => !o)}>💬</button>
-                <button className="icon-btn" title="Régénérer" onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
-                <button className="icon-btn" title="Comparer" onClick={() => setCompareMode(true)}><Columns size={16} /></button>
-                <button className="icon-btn" title="Exporter image" onClick={handleShare}>📷</button>
-                <button className="icon-btn" title="Exporter calendrier" onClick={handleExportIcal}>📅</button>
-                <button className="icon-btn" title="Sauvegarder" onClick={handleSave}><Bookmark size={16} /></button>
-                <button className="icon-btn" title="Réinitialiser" onClick={handleReset}><RotateCcw size={16} /></button>
+                <button className="icon-btn" title={t('header.chat')} onClick={() => setChatOpen(o => !o)}>💬</button>
+                <button className="icon-btn" title={t('header.regenerate')} onClick={handleRegenerateTrip}><Sparkles size={16} /></button>
+                <button className="icon-btn" title={t('header.compare')} onClick={() => setCompareMode(true)}><Columns size={16} /></button>
+                <button className="icon-btn" title={t('header.exportImage')} onClick={handleShare}>📷</button>
+                <button className="icon-btn" title={t('header.exportCalendar')} onClick={handleExportIcal}>📅</button>
+                <button className="icon-btn" title={t('header.save')} onClick={handleSave}><Bookmark size={16} /></button>
+                <button className="icon-btn" title={t('header.reset')} onClick={handleReset}><RotateCcw size={16} /></button>
               </>
             )}
-            <button className="icon-btn" title="Paramètres API" onClick={() => setShowModal(true)}>
+            <button className="icon-btn" title={t('header.settings')} aria-label={t('header.settings')} onClick={() => setShowModal(true)}>
               <Settings size={16} />
             </button>
-            <button className="icon-btn" title="Thème" onClick={() => setDark(d => !d)}>
+            <button className="icon-btn" title={lang === 'fr' ? 'English' : 'Français'} onClick={toggleLang}>
+              <Globe size={16} />
+            </button>
+            <button className="icon-btn" title={t('header.darkTheme')} aria-label={dark ? t('header.lightTheme') : t('header.darkTheme')} onClick={() => setDark(d => !d)}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
           </div>
@@ -2660,7 +2462,7 @@ END:VEVENT
               value={dest}
               onChange={e => setDest(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !loading && handlePlan()}
-              placeholder="Où voulez-vous aller ?"
+              placeholder={t('search.placeholder')}
               disabled={loading}
             />
             <div className="search-divider" />
@@ -2668,24 +2470,24 @@ END:VEVENT
               className="search-input"
               value={depCity}
               onChange={e => setDepCity(e.target.value)}
-              placeholder="Ville de départ"
+              placeholder={t('search.departureCity')}
               disabled={loading}
-              title="Ville de départ"
+              title={t('search.departureCity')}
             />
             <div className="search-divider" />
-            <input type="date" className="date-input" value={dateDepart} onChange={e => setDateDepart(e.target.value)} disabled={loading} title="Date de départ" />
+            <input type="date" className="date-input" value={dateDepart} onChange={e => setDateDepart(e.target.value)} disabled={loading} title={t('search.departureDate')} />
             <div className="search-divider" />
-            <input type="date" className="date-input" value={dateRetour} onChange={e => setDateRetour(e.target.value)} disabled={loading} title="Date de retour" />
+            <input type="date" className="date-input" value={dateRetour} onChange={e => setDateRetour(e.target.value)} disabled={loading} title={t('search.returnDate')} />
             {!loading && extraSteps.length < 4 && (
-              <button className="btn-add-step" title="Ajouter une étape" onClick={addExtraStep}>
+              <button className="btn-add-step" title={t('search.addStep')} onClick={addExtraStep}>
                 <Plus size={14} />
               </button>
             )}
-            <button className="btn-surprise" title="Destination surprise" onClick={handleSurpriseMe} disabled={loading || !keys.mistral}>
+            <button className="btn-surprise" title={t('search.surprise')} onClick={handleSurpriseMe} disabled={loading}>
               🎲
             </button>
-            <button className={`btn-plan${loading ? ' loading' : ''}`} onClick={() => { console.log('[Button click] Plan clicked'); handlePlan(); }} disabled={loading}>
-              {loading ? <><Loader2 size={15} className="spin" />Generating your adventure…</> : <><Sparkles size={15} />Planifier</>}
+            <button className={`btn-plan${loading ? ' loading' : ''}`} onClick={() => handlePlan()} disabled={loading}>
+              {loading ? <><Loader2 size={15} className="spin" />{t('search.planning')}</> : <><Sparkles size={15} />{t('search.plan')}</>}
             </button>
           </div>
           {extraSteps.map((step, i) => (
@@ -2695,10 +2497,10 @@ END:VEVENT
               disabled={loading || stepsLoading.some(Boolean)}
             />
           ))}
-          {!keys.mistral && (
-            <p className="api-hint" onClick={() => setShowModal(true)}>
+          {!keys.mistral && !data && (
+            <p className="api-hint-optional" onClick={() => setShowModal(true)}>
               <Key size={12} style={{ marginRight: 4 }} />
-              Configurez vos clés API pour activer le planificateur
+              {t('search.apiHint')}
             </p>
           )}
           <ProgressBar data={activeData} checked={checked} />
@@ -2719,6 +2521,14 @@ END:VEVENT
         {/* ── PREFERENCES ── */}
         <PreferencesPanel travelers={travelers} setTravelers={setTravelers} style={style} setStyle={setStyle} pace={pace} setPace={setPace} maxBudget={maxBudget} setMaxBudget={setMaxBudget} />
 
+        {/* ── HERO (empty state) ── */}
+        {!data && !loading && (
+          <section className="hero-empty">
+            <h2 className="hero-title">{t('hero.title')}</h2>
+            <p className="hero-sub">{t('hero.sub')}</p>
+          </section>
+        )}
+
         {/* ── INSPIRATIONS ── */}
         {!data && <InspirationCard onSelect={handleInspirationSelect} />}
 
@@ -2738,7 +2548,7 @@ END:VEVENT
             <HotelCard       data={activeData} loading={activeLoading} />
             <PracticalInfoCard data={activeData} loading={activeLoading} />
             <ActivitiesCard  data={activeData} loading={activeLoading} onDayClick={setHighlightedDay} ratings={ratings} setRatings={setRatings} customActivities={customActivities} setCustomActivities={setCustomActivities} deletedIndices={deletedIndices} setDeletedIndices={setDeletedIndices} dayActivityOrder={dayActivityOrder} setDayActivityOrder={setDayActivityOrder} />
-            <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} maxBudget={maxBudget} travelers={travelers} actualSpending={actualSpending} setActualSpending={setActualSpending} />
+            <BudgetCard      data={activeData} loading={activeLoading} highlightedDay={highlightedDay} isOver={activeData?.budget?.total > maxBudget} travelers={travelers} actualSpending={actualSpending} setActualSpending={setActualSpending} />
             <PackingListCard   data={activeData} loading={activeLoading} checked={checked} onToggle={handleToggle} customPackingItems={customPackingItems} setCustomPackingItems={setCustomPackingItems} />
             <NotesCard       data={activeData} loading={activeLoading} onChange={notes => {
               if (activeStepIdx === 0) setData(p => p ? { ...p, notes } : p);

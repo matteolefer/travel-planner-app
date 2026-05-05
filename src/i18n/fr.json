@@ -1,0 +1,215 @@
+{
+  "app": {
+    "title": "Itinera"
+  },
+  "search": {
+    "placeholder": "Où voulez-vous aller ?",
+    "departureCity": "Ville de départ",
+    "departureDate": "Date de départ",
+    "returnDate": "Date de retour",
+    "addStep": "Ajouter une étape",
+    "surprise": "Destination surprise",
+    "plan": "Planifier",
+    "planning": "Planification en cours…",
+    "apiHint": "Gratuit — 5 générations/jour. Ajoute ta propre clé pour un usage illimité.",
+    "destination": "Destination"
+  },
+  "progress": {
+    "ready": "Voyage prêt à {{pct}}%",
+    "steps": "{{done}}/{{total}} étapes"
+  },
+  "sidebar": {
+    "title": "Mes voyages",
+    "empty": "Aucun voyage sauvegardé",
+    "delete": "Supprimer"
+  },
+  "hero": {
+    "title": "Où allez-vous cette fois ?",
+    "sub": "Entrez une destination ci-dessus, ou laissez-vous inspirer par nos suggestions. Notre IA construit votre itinéraire complet en quelques secondes : vols, hôtel, activités, budget, météo, carte interactive."
+  },
+  "inspirations": {
+    "title": "Inspirations",
+    "backpackAsia": "Backpack Asie du Sud-Est",
+    "roadtripUSA": "Roadtrip côte ouest USA",
+    "cityBreak": "City Break Europe",
+    "honeymoon": "Lune de miel Maldives",
+    "trekSA": "Trek Amérique du Sud",
+    "tourMed": "Tour Méditerranée",
+    "weeks": "{{n}} sem",
+    "days": "{{n}} jours"
+  },
+  "header": {
+    "myTrips": "Mes voyages",
+    "timeline": "Timeline",
+    "grid": "Grille",
+    "chat": "Chat IA",
+    "regenerate": "Régénérer",
+    "compare": "Comparer",
+    "exportImage": "Exporter image",
+    "exportCalendar": "Exporter calendrier",
+    "save": "Sauvegarder",
+    "reset": "Réinitialiser",
+    "settings": "Paramètres API",
+    "lightTheme": "Thème clair",
+    "darkTheme": "Thème sombre"
+  },
+  "prefs": {
+    "travelers": "Voyageurs",
+    "style": "Style",
+    "pace": "Rythme",
+    "budgetMax": "Budget max:",
+    "solo": "Solo",
+    "couple": "Couple",
+    "family": "Famille",
+    "group": "Groupe",
+    "backpacker": "Backpacker",
+    "comfort": "Confort",
+    "luxury": "Luxe",
+    "busy": "Chargé",
+    "relaxed": "Tranquille"
+  },
+  "cards": {
+    "weather": "Météo",
+    "flight": "Vol",
+    "realFlight": "Vrai vol",
+    "searchFlights": "Rechercher sur Google Flights",
+    "flightEmpty": "Informations vol",
+    "hotel": "Hôtel",
+    "checkIn": "Check-in",
+    "checkOut": "Check-out",
+    "perNight": "/ nuit",
+    "nights_one": "{{count}} nuit · {{total}}€ total",
+    "nights_other": "{{count}} nuits · {{total}}€ total",
+    "viewBooking": "Voir sur Booking.com",
+    "hotelEmpty": "Réservation hôtel",
+    "practicalInfo": "Infos Pratiques",
+    "visa": "Visa",
+    "vaccines": "Vaccins",
+    "plug": "Prise",
+    "currency": "Monnaie",
+    "timezone": "Décalage",
+    "safety": "Sécurité",
+    "practicalEmpty": "Infos pratiques",
+    "activities": "Activités",
+    "regenerate": "Regénérer",
+    "activityName": "Nom de l'activité",
+    "activityTime": "Horaire (ex: 14:00)",
+    "add": "Ajouter",
+    "cancel": "Annuler",
+    "activitiesEmpty": "Activités planifiées",
+    "viewMaps": "Voir sur Google Maps",
+    "budget": "Budget",
+    "budgetOver": "Dépassement",
+    "exportCSV": "Exporter CSV",
+    "estimated": "estimé",
+    "budgetMax": "Budget max:",
+    "perPerson": "/pers",
+    "dailyExpenses": "Dépenses par jour",
+    "day": "Jour",
+    "housing": "Logement",
+    "food": "Nourriture",
+    "transport": "Transport",
+    "activitiesLabel": "Activités",
+    "total": "Total",
+    "actual": "réel",
+    "budgetEmpty": "Suivi budget",
+    "packingList": "Packing List",
+    "itemsReady": "{{done}}/{{total}} items prêts",
+    "essentials": "Essentiels",
+    "clothes": "Vêtements",
+    "gear": "Équipement",
+    "health": "Santé",
+    "newItem": "Nouvel item...",
+    "packingEmpty": "Packing list",
+    "notes": "Notes",
+    "notesPlaceholder": "Vos notes de voyage…",
+    "map": "Carte",
+    "tbd": "À déterminer",
+    "destPlaceholder": "Votre prochaine destination…"
+  },
+  "modal": {
+    "description": "Description",
+    "duration": "Durée",
+    "estimatedPrice": "Prix estimé",
+    "address": "Adresse",
+    "schedule": "Horaire",
+    "category": "Catégorie"
+  },
+  "settings": {
+    "title": "Clés API",
+    "hint": "Clés stockées en mémoire de session. Les clés OpenWeather et Amadeus sont optionnelles (enrichissement en temps réel).",
+    "cancel": "Annuler",
+    "save": "Enregistrer"
+  },
+  "compare": {
+    "title": "Comparaison de destinations",
+    "weather": "Météo",
+    "hotelPerNight": "Hôtel/nuit",
+    "totalBudget": "Budget total",
+    "activities": "Activités",
+    "activitiesCount": "{{count}} activités",
+    "safety": "Sécurité",
+    "choose": "Choisir celle-ci",
+    "plan": "Planifier"
+  },
+  "chat": {
+    "title": "Assistant IA",
+    "placeholder": "Posez une question...",
+    "systemPrompt": "Tu es un assistant de voyage sympathique. Réponds en 2-3 phrases courtes, en langage naturel, sans JSON, sans markdown, sans listes."
+  },
+  "timeline": {
+    "noActivities": "Aucune activité",
+    "day": "Jour {{n}}",
+    "step": "Étape {{n}}"
+  },
+  "suggestions": {
+    "label": "Destinations similaires"
+  },
+  "toast": {
+    "enterDest": "Veuillez entrer une destination",
+    "dateError": "La date de retour doit être après le départ",
+    "sharedRestored": "Voyage restauré à partir du lien partagé ✓",
+    "budgetOver": "⚠️ Budget dépassé: {{total}}€ > {{max}}€",
+    "keysSaved": "Clés enregistrées ✓",
+    "tripSaved": "Voyage sauvegardé ✓",
+    "weatherUnavailable": "Météo live indisponible — données IA conservées",
+    "flightSearchFailed": "Recherche de vol impossible pour {{city}}",
+    "flightUnavailable": "Vol réel indisponible — données IA conservées",
+    "dataMissing": "Données manquantes",
+    "datesMissing": "Dates manquantes",
+    "dateFormatInvalid": "Format de date invalide",
+    "calendarExported": "Calendrier exporté ✓",
+    "calendarFailed": "Export iCal échoué",
+    "imageExported": "Image exportée ✓",
+    "imageFailed": "Export image échoué",
+    "regenerating": "Génération d'une nouvelle version…",
+    "surpriseFailed": "Impossible de générer une destination surprise",
+    "stepError": "Étape {{n}} : {{message}}"
+  },
+  "filters": {
+    "all": "Tout",
+    "culture": "Culture",
+    "food": "Food",
+    "nature": "Nature",
+    "entertainment": "Divertissement"
+  },
+  "budgetLabels": {
+    "housing": "Logement",
+    "food": "Nourriture",
+    "transport": "Transport",
+    "activities": "Activités",
+    "other": "Autre"
+  },
+  "share": {
+    "activities": "Activités",
+    "totalBudget": "Budget total"
+  },
+  "errors": {
+    "rateLimited": "Mistral a renvoyé 429 — réessaie dans un instant.",
+    "quotaExhausted": "Tu as atteint la limite gratuite quotidienne. Ajoute ta propre clé Mistral dans ⚙️ pour continuer sans limite.",
+    "invalidJson": "L'IA a retourné un format inattendu — réessaie.",
+    "network": "Erreur réseau — vérifie ta connexion.",
+    "invalidKey": "Clé API invalide ou non autorisée.",
+    "unknown": "Une erreur est survenue."
+  }
+}
